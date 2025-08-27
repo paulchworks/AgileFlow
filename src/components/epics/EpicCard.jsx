@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { MoreVertical, Calendar, List } from "lucide-react";
+import { MoreVertical, Calendar, List, Building, Plus } from "lucide-react";
 import { format } from "date-fns";
 import {
   DropdownMenu,
@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-export default function EpicCard({ epic, stories, onEdit }) {
+export default function EpicCard({ epic, stories, onEdit, onAddStory, projectName, showProject }) {
   const completedStories = stories.filter(s => s.status === 'done');
   const progress = stories.length > 0 ? Math.round((completedStories.length / stories.length) * 100) : 0;
   
@@ -35,7 +35,15 @@ export default function EpicCard({ epic, stories, onEdit }) {
         <div className="h-2" style={{ backgroundColor: epic.color }} />
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
-            <h3 className="font-bold text-lg text-slate-900 mb-1">{epic.name}</h3>
+            <div className="flex-1">
+              <h3 className="font-bold text-lg text-slate-900 mb-1">{epic.name}</h3>
+              {showProject && projectName && (
+                <div className="flex items-center gap-1 mb-2">
+                  <Building className="w-3 h-3 text-slate-500" />
+                  <span className="text-xs text-slate-600 font-medium">{projectName}</span>
+                </div>
+              )}
+            </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -44,6 +52,10 @@ export default function EpicCard({ epic, stories, onEdit }) {
               </DropdownMenuTrigger>
               <DropdownMenuContent>
                 <DropdownMenuItem onClick={() => onEdit(epic)}>Edit Epic</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onAddStory(epic)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Story to Epic
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -72,6 +84,17 @@ export default function EpicCard({ epic, stories, onEdit }) {
               </div>
             )}
           </div>
+          {stories.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onAddStory(epic)}
+              className="mt-auto self-start"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Story
+            </Button>
+          )}
         </CardContent>
       </Card>
     </motion.div>

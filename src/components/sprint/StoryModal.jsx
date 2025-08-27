@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Epic, Task, User } from "@/api/entities";
+import { Epic, Task, User, Sprint } from "@/api/entities";
 import {
   Dialog,
   DialogContent,
@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Save, X, Plus, Trash2 } from "lucide-react";
 
-export default function StoryModal({ story, onSubmit, onClose, selectedProject, sprints: projectSprints }) {
+export default function StoryModal({ story, onSubmit, onClose, selectedProject, preSelectedEpic }) {
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -32,12 +32,41 @@ export default function StoryModal({ story, onSubmit, onClose, selectedProject, 
   const [epics, setEpics] = useState([]);
   const [users, setUsers] = useState([]);
   const [tasks, setTasks] = useState([]);
+  const [projectSprints, setProjectSprints] = useState([]);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const loadDropdownData = useCallback(async () => {
+    try {
+      const usersData = await User.list();
+      setUsers(usersData.length > 0 ? usersData : [{ email: 'demo@user.com', full_name: 'Demo User' }]);
+
+      if (selectedProject) {
+        const [projectEpics, sprintsData] = await Promise.all([
+          Epic.filter({ project_id: selectedProject.id }),
+          Sprint.filter({ project_id: selectedProject.id })
+        ]);
+        setEpics(projectEpics);
+        setProjectSprints(sprintsData);
+      }
+    } catch (error) {
+      console.error("Error loading dropdown data:", error);
+    }
+  }, [selectedProject]);
+
+  const loadTasks = useCallback(async () => {
+    try {
+      if (story?.id) {
+        const storyTasks = await Task.filter({ story_id: story.id });
+        setTasks(storyTasks);
+      }
+    } catch (error) {
+      console.error("Error loading tasks:", error);
+    }
+  }, [story]);
+
   useEffect(() => {
-    loadUsers();
-    loadEpics();
+    loadDropdownData();
     if (story) {
       console.log("Loading story data:", story); // Debug log
       setFormData({
@@ -54,52 +83,24 @@ export default function StoryModal({ story, onSubmit, onClose, selectedProject, 
       });
       loadTasks();
     } else {
+      // Set defaults based on context
+      const defaultEpicId = preSelectedEpic ? preSelectedEpic.id : "";
+      const defaultStatus = preSelectedEpic ? "backlog" : "todo"; // Epic stories start in backlog by default
+      
       setFormData({
         title: "", 
         description: "", 
         user_story: "", 
         acceptance_criteria: "",
-        status: "todo", 
+        status: defaultStatus, 
         priority: "medium", 
         story_points: 0, 
         assignee: "", 
-        epic_id: "",
+        epic_id: defaultEpicId,
         sprint_id: ""
       });
     }
-  }, [story, selectedProject]);
-
-  const loadUsers = async () => {
-    try {
-      const usersData = await User.list();
-      setUsers(usersData.length > 0 ? usersData : [{ email: 'demo@user.com', full_name: 'Demo User' }]);
-    } catch (error) {
-      console.error("Error loading users:", error);
-    }
-  };
-
-  const loadEpics = async () => {
-    try {
-      if (selectedProject) {
-        const projectEpics = await Epic.filter({ project_id: selectedProject.id });
-        setEpics(projectEpics);
-        console.log("Loaded epics:", projectEpics); // Debug log
-      }
-    } catch (error) {
-      console.error("Error loading epics:", error);
-    }
-  };
-
-  const loadTasks = async () => {
-    try {
-      if (story?.id) {
-        const storyTasks = await Task.filter({ story_id: story.id });
-        setTasks(storyTasks);
-      }
-    } catch (error) {
-      console.error("Error loading tasks:", error);
-    }
-  };
+  }, [story, selectedProject, preSelectedEpic, loadDropdownData, loadTasks]);
 
   const handleAddTask = async () => {
     if (!newTaskTitle.trim() || !story?.id) return;
@@ -146,11 +147,23 @@ export default function StoryModal({ story, onSubmit, onClose, selectedProject, 
         project_id: selectedProject?.id
       };
       
-      // Auto-update status when moving to/from backlog
-      if (cleanedData.sprint_id && story?.status === 'backlog') {
-        cleanedData.status = 'todo';
-      } else if (!cleanedData.sprint_id && story?.sprint_id) {
-        cleanedData.status = 'backlog';
+      // Auto-update status logic
+      if (story) { // Editing an existing story
+        if (cleanedData.sprint_id && story.status === 'backlog') {
+          // Moving from backlog to a sprint
+          cleanedData.status = 'todo';
+        } else if (!cleanedData.sprint_id && story.sprint_id) {
+          // Moving from a sprint to the backlog
+          cleanedData.status = 'backlog';
+        }
+        // Otherwise, keep the status from the form, which was loaded from the original story
+      } else { // Creating a new story
+        if (cleanedData.sprint_id) {
+          // New story created directly in a sprint
+          cleanedData.status = 'todo';
+        } 
+        // If no sprint_id, cleanedData.status remains whatever it was from formData.
+        // This allows 'todo' for non-epic new stories, and 'backlog' for epic stories.
       }
 
       console.log("Submitting story data:", cleanedData); // Debug log
@@ -176,7 +189,7 @@ export default function StoryModal({ story, onSubmit, onClose, selectedProject, 
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle className="text-xl font-bold">
-              {story ? "Edit Story" : "Create New Story"}
+              {story ? "Edit Story" : preSelectedEpic ? `Add Story to ${preSelectedEpic.name}` : "Create New Story"}
             </DialogTitle>
             <Button
               variant="ghost"
@@ -187,6 +200,11 @@ export default function StoryModal({ story, onSubmit, onClose, selectedProject, 
               <X className="w-5 h-5" />
             </Button>
           </div>
+          {preSelectedEpic && (
+            <div className="text-sm text-slate-600 mt-2">
+              This story will be added to the <strong>{preSelectedEpic.name}</strong> epic and placed in the backlog.
+            </div>
+          )}
         </DialogHeader>
 
         <motion.div

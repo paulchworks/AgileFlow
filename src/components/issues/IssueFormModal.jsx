@@ -25,9 +25,9 @@ export default function IssueFormModal({ issue, onSubmit, onClose, projects, use
     assignee: issue?.assignee || "",
     reporter: issue?.reporter || ""
   });
-
   const [epics, setEpics] = useState([]);
   const [stories, setStories] = useState([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (formData.project_id) {
@@ -52,9 +52,19 @@ export default function IssueFormModal({ issue, onSubmit, onClose, projects, use
     setFormData(prev => ({ ...prev, [field]: value === '' ? null : value }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSubmit(formData);
+    if (isSubmitting) return;
+    
+    setIsSubmitting(true);
+    try {
+      console.log("Submitting issue data:", formData); // Debug log
+      await onSubmit(formData);
+    } catch (error) {
+      console.error("Error submitting issue:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -236,14 +246,15 @@ export default function IssueFormModal({ issue, onSubmit, onClose, projects, use
             </div>
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={onClose}>
+              <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
                 Cancel
               </Button>
               <Button 
                 type="submit" 
                 className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600"
+                disabled={isSubmitting}
               >
-                {issue ? "Update Issue" : "Create Issue"}
+                {isSubmitting ? "Saving..." : (issue ? "Update Issue" : "Create Issue")}
               </Button>
             </DialogFooter>
           </form>

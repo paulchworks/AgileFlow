@@ -1,70 +1,66 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { SendEmail } from "@/api/integrations";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Send, X, Mail } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Send, X } from "lucide-react";
+import { toast } from "sonner";
 
-export default function InviteModal({ onClose, onInviteSent }) {
-  const [formData, setFormData] = useState({
-    email: "",
-    role: "user"
-  });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState("");
+export default function InviteModal({ onClose }) {
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("user");
+  const [isSending, setIsSending] = useState(false);
 
-  const handleSubmit = async (e) => {
+  const handleInvite = async (e) => {
     e.preventDefault();
-    if (!formData.email) return;
-    
-    setIsSubmitting(true);
-    setError("");
-    
-    try {
-      const emailBody = `
+    if (!email) {
+      toast.error("Please enter an email address.");
+      return;
+    }
+    setIsSending(true);
+
+    const appUrl = window.location.origin;
+    const emailBody = `
         <div style="font-family: sans-serif; padding: 20px; color: #333;">
           <h1 style="color: #1e293b;">You're Invited to AgileFlow!</h1>
           <p>You have been invited to join the AgileFlow project management workspace.</p>
           <p>Click the button below to sign up and get started:</p>
           <a 
-            href="${window.location.origin}" 
+            href="${appUrl}" 
             style="display: inline-block; padding: 12px 24px; background-color: #059669; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;"
           >
             Accept Invitation
           </a>
           <p style="margin-top: 20px; font-size: 12px; color: #64748b;">
-            If you're having trouble with the button, copy and paste this URL into your browser: ${window.location.origin}
+            If you're having trouble with the button, copy and paste this URL into your browser: ${appUrl}
           </p>
         </div>
       `;
 
+    try {
+      const { SendEmail } = await import("@/api/integrations");
       await SendEmail({
-        to: formData.email,
+        to: email,
         from_name: "The AgileFlow Team",
         subject: "Your Invitation to AgileFlow",
-        body: emailBody
+        body: emailBody,
       });
-
-      onInviteSent();
+      toast.success(`Invitation sent to ${email}`);
+      onClose();
     } catch (error) {
       console.error("Failed to send invitation:", error);
-      setError(`Failed to send invitation: ${error.message || 'Unknown error'}`);
+      toast.error(`Failed to send invitation: ${error.message || 'An unknown error occurred.'}`);
+    } finally {
+      setIsSending(false);
     }
-    
-    setIsSubmitting(false);
-  };
-
-  const handleChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   return (
@@ -72,11 +68,10 @@ export default function InviteModal({ onClose, onInviteSent }) {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <div className="flex items-center justify-between">
-            <DialogTitle className="text-xl font-bold flex items-center gap-2">
-              <Mail className="w-6 h-6 text-emerald-600" />
+            <DialogTitle className="text-xl font-bold">
               Invite Team Member
             </DialogTitle>
-            <Button
+             <Button
               variant="ghost"
               size="icon"
               onClick={onClose}
@@ -85,6 +80,9 @@ export default function InviteModal({ onClose, onInviteSent }) {
               <X className="w-5 h-5" />
             </Button>
           </div>
+          <DialogDescription>
+            Enter the email address and assign a role to invite a new member.
+          </DialogDescription>
         </DialogHeader>
 
         <motion.div
@@ -92,30 +90,21 @@ export default function InviteModal({ onClose, onInviteSent }) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
         >
-          <form onSubmit={handleSubmit} className="space-y-6 mt-6">
-            {error && (
-              <Alert className="border-red-200 bg-red-50">
-                <AlertDescription className="text-red-800">
-                  {error}
-                </AlertDescription>
-              </Alert>
-            )}
-            
+          <form onSubmit={handleInvite} className="space-y-6 mt-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email Address *</Label>
+              <Label htmlFor="email">Email Address</Label>
               <Input
                 id="email"
                 type="email"
-                value={formData.email}
-                onChange={(e) => handleChange("email", e.target.value)}
-                placeholder="colleague@company.com"
+                placeholder="name@company.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 required
               />
             </div>
-
             <div className="space-y-2">
               <Label htmlFor="role">Role</Label>
-              <Select value={formData.role} onValueChange={(value) => handleChange("role", value)}>
+              <Select value={role} onValueChange={setRole}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -125,23 +114,14 @@ export default function InviteModal({ onClose, onInviteSent }) {
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="flex justify-end gap-3 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onClose}
-                disabled={isSubmitting}
-              >
-                Cancel
-              </Button>
+            <div className="flex justify-end pt-4">
               <Button
                 type="submit"
                 className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600"
-                disabled={isSubmitting || !formData.email}
+                disabled={isSending}
               >
                 <Send className="w-4 h-4 mr-2" />
-                {isSubmitting ? "Sending..." : "Send Invitation"}
+                {isSending ? "Sending..." : "Send Invitation"}
               </Button>
             </div>
           </form>

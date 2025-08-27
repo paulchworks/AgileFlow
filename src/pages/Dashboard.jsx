@@ -1,5 +1,7 @@
+
 import React, { useState, useEffect } from "react";
 import { Project, Sprint, Story } from "@/api/entities";
+import { updateAllProjectStatuses } from "@/components/utils/projectStatusUpdater";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
@@ -33,6 +35,9 @@ export default function Dashboard() {
   const loadData = async () => {
     setIsLoading(true);
     try {
+      // Update all project statuses first to ensure consistency
+      await updateAllProjectStatuses();
+      
       const [projectsData, sprintsData, storiesData] = await Promise.all([
         Project.list("-created_date"),
         Sprint.list("-created_date"),

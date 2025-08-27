@@ -13,7 +13,8 @@ import {
   Users,
   Calendar,
   Target,
-  CheckSquare
+  CheckSquare,
+  Folder
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -36,8 +37,9 @@ const priorityIcons = {
   urgent: AlertTriangle
 };
 
-export default function BacklogStoryCard({ story, tasks, index, onEdit }) {
+export default function BacklogStoryCard({ story, tasks, index, onEdit, projects = [], showProject = false }) {
   const PriorityIcon = priorityIcons[story.priority] || Flag;
+  const project = showProject ? projects.find(p => p.id === story.project_id) : null;
 
   const getInitials = (email) => {
     if (!email) return 'U';
@@ -87,7 +89,7 @@ export default function BacklogStoryCard({ story, tasks, index, onEdit }) {
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   <Badge
                     variant="secondary"
                     className={`${priorityColors[story.priority]} border font-medium`}
@@ -95,6 +97,17 @@ export default function BacklogStoryCard({ story, tasks, index, onEdit }) {
                     <PriorityIcon className="w-3 h-3 mr-1" />
                     {story.priority}
                   </Badge>
+                  
+                  {project && (
+                    <Badge variant="outline" style={{
+                        backgroundColor: project.color ? `${project.color}20` : undefined,
+                        borderColor: project.color,
+                        color: project.color
+                    }}>
+                      <Folder className="w-3 h-3 mr-1" />
+                      {project.name}
+                    </Badge>
+                  )}
 
                   {story.story_points > 0 && (
                     <Badge variant="outline" className="font-medium">

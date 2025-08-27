@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Issue, Project, Epic, Story, User } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
@@ -13,16 +13,12 @@ export default function IssuesPage() {
   const [issues, setIssues] = useState([]);
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
-  const [filters, setFilters] = useState({ project_id: '', status: '', priority: '', issue_type: '', search: '' });
+  const [filters, setFilters] = useState({ project_id: 'all', status: '', priority: '', issue_type: '', search: '' });
   const [showModal, setShowModal] = useState(false);
   const [editingIssue, setEditingIssue] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
       const [issuesData, projectsData, usersData] = await Promise.all([
@@ -33,21 +29,30 @@ export default function IssuesPage() {
       setIssues(issuesData);
       setProjects(projectsData);
       setUsers(usersData.length > 0 ? usersData : [{ email: 'demo@user.com', full_name: 'Demo User' }]);
-      if (projectsData.length > 0 && !filters.project_id) {
+      
+      // Set default project to first project if 'all' is not selected and no project is set
+      if (projectsData.length > 0 && filters.project_id !== 'all' && !filters.project_id) {
         setFilters(f => ({ ...f, project_id: projectsData[0].id }));
       }
     } catch (error) {
       console.error("Error loading issues data:", error);
     }
     setIsLoading(false);
-  };
+  }, [filters.project_id]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleIssueSubmit = async (issueData) => {
     try {
       if (editingIssue) {
         await Issue.update(editingIssue.id, issueData);
       } else {
-        await Issue.create({ ...issueData, project_id: issueData.project_id || filters.project_id });
+        // When creating a new issue, ensure we have a project_id
+        const projectToUse = issueData.project_id || 
+          (filters.project_id !== 'all' && filters.project_id ? filters.project_id : projects[0]?.id);
+        await Issue.create({ ...issueData, project_id: projectToUse });
       }
       setShowModal(false);
       setEditingIssue(null);
@@ -64,7 +69,7 @@ export default function IssuesPage() {
 
   const filteredIssues = issues.filter(issue => {
     return (
-      (!filters.project_id || issue.project_id === filters.project_id) &&
+      (filters.project_id === 'all' || !filters.project_id || issue.project_id === filters.project_id) &&
       (!filters.status || issue.status === filters.status) &&
       (!filters.priority || issue.priority === filters.priority) &&
       (!filters.issue_type || issue.issue_type === filters.issue_type) &&
@@ -72,9 +77,17 @@ export default function IssuesPage() {
     );
   });
 
+  // Get the currently selected project for the modal, or fallback to first project
+  const getSelectedProjectForModal = () => {
+    if (filters.project_id === 'all' || !filters.project_id) {
+      return projects.length > 0 ? projects[0].id : '';
+    }
+    return filters.project_id;
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
+      <div className="max-w-7xl mx-auto p-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -82,7 +95,7 @@ export default function IssuesPage() {
         >
           <div>
             <h1 className="text-4xl font-bold text-slate-900 mb-2">Issues</h1>
-            <p className="text-slate-700 text-lg">Track bugs, tasks, and improvements.</p>
+            <p className="text-slate-700 text-lg">Track bugs, tasks, and improvements across all projects.</p>
           </div>
           <Button
             onClick={() => { setEditingIssue(null); setShowModal(true); }}
@@ -94,7 +107,7 @@ export default function IssuesPage() {
         </motion.div>
 
         <Card className="shadow-lg border-0 mb-8">
-          <CardContent className="p-4">
+          <CardContent className="p-6">
             <IssueFilters
               filters={filters}
               onFilterChange={setFilters}
@@ -103,12 +116,15 @@ export default function IssuesPage() {
           </CardContent>
         </Card>
 
-        <IssueTable
-          issues={filteredIssues}
-          onEdit={handleEditIssue}
-          isLoading={isLoading}
-          users={users}
-        />
+        <div className="bg-white rounded-xl shadow-lg border border-slate-200/80 overflow-hidden">
+          <IssueTable
+            issues={filteredIssues}
+            onEdit={handleEditIssue}
+            isLoading={isLoading}
+            users={users}
+            projects={projects}
+          />
+        </div>
 
         <AnimatePresence>
           {showModal && (
@@ -118,7 +134,7 @@ export default function IssuesPage() {
               onClose={() => { setShowModal(false); setEditingIssue(null); }}
               projects={projects}
               users={users}
-              initialProjectId={filters.project_id}
+              initialProjectId={getSelectedProjectForModal()}
             />
           )}
         </AnimatePresence>

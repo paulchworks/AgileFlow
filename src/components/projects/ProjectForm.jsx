@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,10 +22,21 @@ export default function ProjectForm({ project, onSubmit, onCancel }) {
     team_lead: project?.team_lead || "",
     color: project?.color || PROJECT_COLORS[0]
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSubmit(formData);
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      console.log("Submitting project data:", formData); // Debug log
+      await onSubmit(formData);
+    } catch (error) {
+      console.error("Error submitting project:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleChange = (field, value) => {
@@ -147,15 +159,17 @@ export default function ProjectForm({ project, onSubmit, onCancel }) {
               type="button"
               variant="outline"
               onClick={onCancel}
+              disabled={isSubmitting}
             >
               Cancel
             </Button>
             <Button
               type="submit"
               className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600"
+              disabled={isSubmitting}
             >
               <Save className="w-4 h-4 mr-2" />
-              {project ? "Update" : "Create"} Project
+              {isSubmitting ? "Saving..." : (project ? "Update" : "Create")} Project
             </Button>
           </div>
         </form>

@@ -1,13 +1,21 @@
 import React from "react";
+import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Users, Calendar, Edit, Folder } from "lucide-react";
-import { format } from "date-fns";
+import { Users, ListChecks, Calendar, Edit, ArrowRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { format } from "date-fns";
+
+const statusColors = {
+  planning: "bg-slate-100 text-slate-800 border-slate-200",
+  active: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  completed: "bg-blue-100 text-blue-800 border-blue-200",
+  on_hold: "bg-amber-100 text-amber-800 border-amber-200"
+};
 
 export default function ProjectCard({ project, stories, onEdit, isLoading }) {
   if (isLoading) {
@@ -18,57 +26,92 @@ export default function ProjectCard({ project, stories, onEdit, isLoading }) {
           <Skeleton className="h-4 w-1/4" />
         </CardHeader>
         <CardContent>
-          <Skeleton className="h-4 w-full mb-4" />
-          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-4 w-full mb-1" />
+          <Skeleton className="h-4 w-2/3" />
+          <Skeleton className="h-2 w-full mt-4" />
         </CardContent>
+        <CardFooter>
+          <Skeleton className="h-8 w-24" />
+        </CardFooter>
       </Card>
     );
   }
 
-  const completedStories = stories.filter(s => s.status === 'done');
-  const progress = stories.length > 0 ? Math.round((completedStories.length / stories.length) * 100) : 0;
-  
+  const progress = stories.length > 0 ? 
+    Math.round((stories.filter(s => s.status === 'done').length / stories.length) * 100) : 0;
+
   return (
-    <Card className="shadow-lg hover:shadow-xl transition-all duration-300 border-0 flex flex-col h-full bg-white">
-      <CardHeader className="flex flex-row items-start justify-between">
-        <div>
-          <CardTitle className="text-lg font-bold text-slate-900 mb-2">
-            <Link to={createPageUrl(`ProjectDetails?id=${project.id}`)} className="hover:underline">
-              {project.name}
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -4 }}
+      transition={{ duration: 0.3 }}
+      className="h-full flex flex-col"
+    >
+      <Card className="shadow-lg hover:shadow-xl transition-all duration-300 border-0 flex flex-col flex-grow">
+        <CardHeader>
+          <div className="flex items-start justify-between">
+            <Link 
+              to={createPageUrl(`ProjectDetails?id=${project.id}`)}
+              className="group"
+            >
+              <CardTitle className="text-lg font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">
+                {project.name}
+              </CardTitle>
             </Link>
-          </CardTitle>
-          <Badge style={{ backgroundColor: `${project.color}20`, color: project.color, borderColor: `${project.color}50` }} className="border">
-            {project.status}
-          </Badge>
-        </div>
-        <Button variant="ghost" size="icon" onClick={() => onEdit(project)}>
-          <Edit className="w-4 h-4 text-slate-500" />
-        </Button>
-      </CardHeader>
-      <CardContent className="flex-grow">
-        <p className="text-sm text-slate-800 mb-4 h-10 line-clamp-2">{project.description}</p>
-        
-        <div className="space-y-2 mb-4">
-          <div className="flex justify-between text-xs font-medium text-slate-800">
+            <Badge className={`${statusColors[project.status]} border text-xs font-medium`}>
+              {project.status.replace('_', ' ')}
+            </Badge>
+          </div>
+          {project.description && (
+            <p className="text-sm text-slate-700 pt-1 line-clamp-2">
+              {project.description}
+            </p>
+          )}
+        </CardHeader>
+
+        <CardContent className="flex-grow">
+          <div className="flex items-center justify-between text-sm text-slate-800 mb-2">
             <span>Progress</span>
-            <span>{progress}%</span>
+            <span className="font-semibold">{progress}%</span>
           </div>
           <Progress value={progress} className="h-2" />
-        </div>
 
-        <div className="flex justify-between items-center text-sm text-slate-800 border-t pt-4">
-          <div className="flex items-center gap-2">
-            <Folder className="w-4 h-4" />
-            <span>{stories.length} stories</span>
-          </div>
-          {project.end_date && (
+          <div className="mt-4 space-y-2 text-sm text-slate-800">
             <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4" />
-              <span>{format(new Date(project.end_date), "MMM d, yyyy")}</span>
+              <ListChecks className="w-4 h-4 text-slate-600" />
+              <span>{stories.length} stories</span>
             </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+            {project.end_date && (
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-slate-600" />
+                <span>Due {format(new Date(project.end_date), "MMM d, yyyy")}</span>
+              </div>
+            )}
+          </div>
+        </CardContent>
+
+        <CardFooter className="bg-slate-50/50 p-4 flex justify-between items-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onEdit(project);
+            }}
+          >
+            <Edit className="w-4 h-4 mr-2" />
+            Edit
+          </Button>
+          <Link to={createPageUrl(`Backlog?project_id=${project.id}`)}>
+            <Button variant="outline" size="sm">
+              View Backlog
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
+          </Link>
+        </CardFooter>
+      </Card>
+    </motion.div>
   );
 }

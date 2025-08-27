@@ -241,7 +241,6 @@ export default function SprintBoard() {
           <StoryModal
             story={editingStory}
             selectedProject={selectedProject}
-            sprints={projectSprints}
             onSubmit={handleStorySubmit}
             onClose={() => {
               setShowStoryModal(false);

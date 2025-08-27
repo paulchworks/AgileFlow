@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,7 +23,7 @@ const colorOptions = [
   { value: '#ec4899', label: 'Pink' },
 ];
 
-export default function EpicForm({ epic, onSubmit, onCancel }) {
+export default function EpicForm({ epic, onSubmit, onCancel, selectedProject }) {
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -31,9 +32,11 @@ export default function EpicForm({ epic, onSubmit, onCancel }) {
     end_date: null,
     color: '#6366f1',
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (epic) {
+      console.log("Loading epic data:", epic); // Debug log
       setFormData({
         name: epic.name || "",
         description: epic.description || "",
@@ -45,9 +48,25 @@ export default function EpicForm({ epic, onSubmit, onCancel }) {
     }
   }, [epic]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSubmit(formData);
+    if (isSubmitting) return;
+    
+    // Add validation for selectedProject
+    if (!selectedProject) {
+      alert("Please select a project first to create an epic.");
+      return;
+    }
+    
+    setIsSubmitting(true);
+    try {
+      console.log("Submitting epic data:", formData); // Debug log
+      await onSubmit(formData);
+    } catch (error) {
+      console.error("Error submitting epic:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleChange = (field, value) => {
@@ -125,8 +144,13 @@ export default function EpicForm({ epic, onSubmit, onCancel }) {
             </div>
           </div>
           <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={onCancel}><X className="w-4 h-4 mr-2" /> Cancel</Button>
-            <Button type="submit"><Save className="w-4 h-4 mr-2" /> {epic ? 'Update Epic' : 'Save Epic'}</Button>
+            <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
+              <X className="w-4 h-4 mr-2" /> Cancel
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              <Save className="w-4 h-4 mr-2" /> 
+              {isSubmitting ? "Saving..." : (epic ? 'Update Epic' : 'Save Epic')}
+            </Button>
           </div>
         </form>
       </CardContent>

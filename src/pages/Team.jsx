@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { User, Story } from "@/api/entities";
 import { Button } from "@/components/ui/button";
-import { UserPlus, Info } from "lucide-react";
+import { UserPlus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent } from "@/components/ui/card";
 
 import TeamStats from "../components/team/TeamStats";
@@ -48,12 +47,6 @@ export default function Team() {
     setIsLoading(false);
   };
   
-  const handleInviteSent = () => {
-    setShowInviteModal(false);
-    // Optionally, you could show a success toast here
-    // For now, we just close the modal.
-  };
-
   const filteredUsers = useMemo(() => {
     return users.filter(user => {
       const typeMatch = filters.type === 'all' || user.user_type === filters.type;
@@ -87,14 +80,6 @@ export default function Team() {
           </Button>
         </motion.div>
         
-        <Alert className="mb-8 bg-blue-50 border-blue-200 text-blue-800">
-          <Info className="h-4 w-4 !text-blue-800" />
-          <AlertTitle>Manage Your Team</AlertTitle>
-          <AlertDescription>
-            Invite new internal or external members by clicking the "Invite Team Members" button. Once they join and complete their profiles, their real data will appear here.
-          </AlertDescription>
-        </Alert>
-
         <TeamStats users={users} isLoading={isLoading} />
         <TeamFilters onFilterChange={setFilters} />
 
@@ -119,7 +104,6 @@ export default function Team() {
         {showInviteModal && (
           <InviteModal 
             onClose={() => setShowInviteModal(false)}
-            onInviteSent={handleInviteSent}
           />
         )}
       </AnimatePresence>

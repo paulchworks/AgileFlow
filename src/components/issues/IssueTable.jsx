@@ -28,9 +28,13 @@ const statusColors = {
   wont_fix: "bg-pink-100 text-pink-800"
 };
 
-export default function IssueTable({ issues, onEdit, isLoading, users }) {
+export default function IssueTable({ issues, onEdit, isLoading, users, projects = [] }) {
   const getUser = (email) => {
     return users.find(u => u.email === email);
+  };
+
+  const getProject = (projectId) => {
+    return projects.find(p => p.id === projectId);
   };
 
   if (isLoading) {
@@ -39,7 +43,8 @@ export default function IssueTable({ issues, onEdit, isLoading, users }) {
         <Table>
           <TableHeader className="bg-slate-50">
             <TableRow>
-              <TableHead className="w-[50%]">Title</TableHead>
+              <TableHead className="w-[40%]">Title</TableHead>
+              <TableHead>Project</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Priority</TableHead>
               <TableHead>Assignee</TableHead>
@@ -50,6 +55,7 @@ export default function IssueTable({ issues, onEdit, isLoading, users }) {
             {Array(5).fill(0).map((_, i) => (
               <TableRow key={i}>
                 <TableCell><Skeleton className="h-4 w-full" /></TableCell>
+                <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                 <TableCell><Skeleton className="h-6 w-20" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                 <TableCell><Skeleton className="h-4 w-24" /></TableCell>
@@ -67,7 +73,8 @@ export default function IssueTable({ issues, onEdit, isLoading, users }) {
       <Table>
         <TableHeader className="bg-slate-50">
           <TableRow>
-            <TableHead className="w-[50%]">Title</TableHead>
+            <TableHead className="w-[40%]">Title</TableHead>
+            <TableHead>Project</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Priority</TableHead>
             <TableHead>Assignee</TableHead>
@@ -77,6 +84,7 @@ export default function IssueTable({ issues, onEdit, isLoading, users }) {
         <TableBody>
           {issues.length > 0 ? issues.map(issue => {
             const assignee = getUser(issue.assignee);
+            const project = getProject(issue.project_id);
             const TypeIcon = typeIcons[issue.issue_type] || AlertTriangle;
             
             return (
@@ -92,6 +100,11 @@ export default function IssueTable({ issues, onEdit, isLoading, users }) {
                     }`} />
                     <span className="text-slate-900">{issue.title}</span>
                   </div>
+                </TableCell>
+                <TableCell>
+                  <span className="text-slate-800 font-medium">
+                    {project ? project.name : 'Unknown Project'}
+                  </span>
                 </TableCell>
                 <TableCell>
                   <Badge variant="secondary" className={statusColors[issue.status]}>
@@ -123,7 +136,7 @@ export default function IssueTable({ issues, onEdit, isLoading, users }) {
             );
           }) : (
             <TableRow>
-              <TableCell colSpan={5} className="text-center h-24 text-slate-700">
+              <TableCell colSpan={6} className="text-center h-24 text-slate-700">
                 No issues found for the selected criteria.
               </TableCell>
             </TableRow>

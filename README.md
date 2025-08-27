@@ -1,7 +1,7 @@
-# AgileFlow Project Management Software
+# Base44 App
 
-<img width="1625" height="828" alt="image" src="https://github.com/user-attachments/assets/5d582dba-7db6-4b34-b7fe-636b8ca701d1" />
 
+This app was created automatically by Base44.
 It's a Vite+React app that communicates with the Base44 API.
 
 ## Running the app
@@ -16,3 +16,5 @@ npm run dev
 ```bash
 npm run build
 ```
+
+For more information and support, please contact Base44 support at app@base44.com.

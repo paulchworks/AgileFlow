@@ -24,11 +24,12 @@ export default function IssueFilters({ filters, onFilterChange, projects }) {
         />
       </div>
       
-      <Select value={filters.project_id || ''} onValueChange={(v) => handleFilter('project_id', v)}>
+      <Select value={filters.project_id || 'all'} onValueChange={(v) => handleFilter('project_id', v)}>
         <SelectTrigger>
           <SelectValue placeholder="Select project..." />
         </SelectTrigger>
         <SelectContent>
+          <SelectItem value="all">All Projects</SelectItem>
           {projects.map(project => (
             <SelectItem key={project.id} value={project.id}>
               {project.name}
