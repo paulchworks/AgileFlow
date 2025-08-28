@@ -1,12 +1,13 @@
-// src/main.jsx
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from '@/App.jsx';
 import '@/index.css';
 
-// --- begin runtime shim (add these two lines) ---
+// Runtime shim: ensure a global service exists with .list/.create
 import Project from '@/api/entities';
-if (typeof window !== 'undefined') window.__AgileFlowProjectAPI = Project;
-// --- end runtime shim ---
+if (typeof window !== 'undefined') {
+  window.__AgileFlowProjectAPI = Project;
+}
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+

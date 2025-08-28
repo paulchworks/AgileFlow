@@ -1,4 +1,3 @@
-// src/api/entities.js
 import { BoardsAPI } from '../lib/apiClient';
 
 const projectToBoard = (p) => ({
@@ -24,10 +23,7 @@ const boardToProject = (board, id) => ({ id, ...(board?.meta ?? {}) });
 const genId = () => (crypto?.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2, 10));
 
 export const Project = {
-  async list() {
-    // stub for now; returns [] so dashboard/quick stats don’t crash
-    return [];
-  },
+  async list() { return []; }, // safe stub so dashboards don’t crash
   async create(projectData) {
     const id = projectData?.id || genId();
     const board = projectToBoard(projectData || {});
@@ -52,9 +48,9 @@ export const Project = {
   },
 };
 
-export default Project; // <— default export has .list/.create
+export default Project;
 
-// Optional shims for any other imports:
+// optional shims (harmless if unused)
 export const Board = {
   get: (id) => BoardsAPI.get(id),
   create: (id, d) => BoardsAPI.create(id, d),
@@ -62,8 +58,11 @@ export const Board = {
   delete: (id) => BoardsAPI.del(id),
 };
 export const Sprint = {};
-export const Story = {};
-export const Epic = {};
-export const Issue = {};
-export const Task = {};
-export const User = {};
+export const Story  = {};
+export const Epic   = {};
+export const Issue  = {};
+export const Task   = {};
+export const User   = {};
+
+// runtime probe (lets you verify in console)
+if (typeof window !== 'undefined') window.__AgileFlowProjectAPI = Project;
