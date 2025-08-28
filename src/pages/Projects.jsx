@@ -115,7 +115,7 @@ export default function Projects() {
         {!isLoading && projects.length === 0 && (
           <div className="text-center py-16">
             <h3 className="text-xl font-semibold text-slate-800 mb-4">No Projects Yet</h3>
-            <p className="text-slate-600 mb-6">Get started by creating your first ProjectSvc.</p>
+            <p className="text-slate-600 mb-6">Get started by creating your first Project</p>
             <Button 
               onClick={() => setShowForm(true)}
               className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600"

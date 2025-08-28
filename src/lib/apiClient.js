@@ -1,39 +1,104 @@
-// --- robust API base + allowlist ---
-let API_BASE = (typeof window !== 'undefined' && window.__APP_API_BASE) || (import.meta.env?.VITE_API_BASE || '');
-API_BASE = (API_BASE || '').replace(/\/+$/, ''); // trim trailing slashes
+// src/lib/apiClient.js
 
-if (/\.execute-api\.[^/]+\.amazonaws\.com$/.test(API_BASE)) {
-  API_BASE = API_BASE + '/prod'; // safety: add stage if missing
-}
-if (typeof window !== 'undefined') {
-  window.__APP_API_BASE = API_BASE;
-  console.log('[AgileFlow] API_BASE =', API_BASE);
-}
+// ---- base URL ----
+const RAW_BASE =
+  (typeof window !== 'undefined' && window.__APP_API_BASE) ||
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE) ||
+  '';
+const API_BASE = String(RAW_BASE).replace(/\/+$/, ''); // trim trailing slash
 
-const ALLOWLIST = API_BASE ? [new URL(API_BASE).host] : [];
+const allow = (path) => `${API_BASE}${path}`;
 
-// NOTE: strips any leading slashes from `path` and ALWAYS appends to API_BASE + '/'
-function allow(path) {
-  const base = API_BASE + '/';
-  const cleanPath = String(path || '').replace(/^\/+/, ''); // <-- key line
-  const u = new URL(cleanPath, base);
-  if (!ALLOWLIST.includes(u.host)) {
-    throw new Error(`Blocked outbound request to disallowed host: ${u.host}`);
-  }
-  return u.toString();
-}
+// ---- date sanitizers ----
+const DATE_KEY_RE =
+  /(^|_)(date|time)$|(_at$)|(^start$)|(^end$)|(^due$)|(^deadline$)|(^created$)|(^updated$)/i;
 
-// ---- Public API ----
-export const BoardsAPI = {
-  get:    async (id)         => (await fetch(allow(`boards/${id}`))).json(),
-  save:   async (id, d, v)   => (await fetch(allow(`boards/${id}`), {
-                         method:'PUT', headers:{'content-type':'application/json'},
-                         body: JSON.stringify({ data:d, version:v })
-                       })).json(),
-  create: async (id, d)      => (await fetch(allow('boards'), {
-                         method:'POST', headers:{'content-type':'application/json'},
-                         body: JSON.stringify({ id, data:d })
-                       })).json(),
-  del:    async (id)         => (await fetch(allow(`boards/${id}`), { method:'DELETE' })).json(),
+const toISOorNull = (v) => {
+  if (v === null || v === undefined || v === '') return null;
+  const d = v instanceof Date ? v : new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
 };
+
+const sanitizeDeep = (val) => {
+  if (Array.isArray(val)) return val.map(sanitizeDeep);
+  if (val && typeof val === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(val)) {
+      if (DATE_KEY_RE.test(k)) out[k] = toISOorNull(v);
+      else out[k] = sanitizeDeep(v);
+    }
+    return out;
+  }
+  return val;
+};
+
+// Ensure we never write invalid date strings
+const scrubMetaDates = (data = {}) => {
+  const meta = data.meta || {};
+  const cleaned = { ...meta };
+  cleaned.start_date = toISOorNull(meta.start_date ?? meta.startDate ?? meta.start);
+  cleaned.end_date   = toISOorNull(meta.end_date   ?? meta.endDate   ?? meta.end);
+  cleaned.created_at = toISOorNull(meta.created_at ?? meta.createdAt ?? meta.created) || new Date().toISOString();
+  if (meta.updated_at ?? meta.updatedAt) {
+    cleaned.updated_at = toISOorNull(meta.updated_at ?? meta.updatedAt);
+  }
+  return { ...data, meta: { ...meta, ...cleaned } };
+};
+
+// ---- JSON helpers ----
+const parseJsonSanitized = async (res) => {
+  const ct = res.headers?.get?.('content-type') || '';
+  if (!ct.includes('application/json')) return null;
+  const j = await res.json();
+  return sanitizeDeep(j);
+};
+
+const handle = async (res, method, path) => {
+  if (!res.ok) {
+    const body = await (async () => {
+      try { return await res.text(); } catch { return ''; }
+    })();
+    throw new Error(`HTTP ${res.status} ${method} ${path} ${body ? `- ${body}` : ''}`);
+  }
+  return parseJsonSanitized(res);
+};
+
+// ---- API surface used by the app ----
+export const BoardsAPI = {
+  async get(id) {
+    const path = `/boards/${id}`;
+    const r = await fetch(allow(path));
+    return handle(r, 'GET', path);
+  },
+
+  async save(id, data, version) {
+    const path = `/boards/${id}`;
+    const body = JSON.stringify({ data: scrubMetaDates(data), version });
+    const r = await fetch(allow(path), {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body,
+    });
+    return handle(r, 'PUT', path);
+  },
+
+  async create(id, data) {
+    const path = `/boards`;
+    const body = JSON.stringify({ id, data: scrubMetaDates(data) });
+    const r = await fetch(allow(path), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body,
+    });
+    return handle(r, 'POST', path);
+  },
+
+  async del(id) {
+    const path = `/boards/${id}`;
+    const r = await fetch(allow(path), { method: 'DELETE' });
+    return handle(r, 'DELETE', path);
+  },
+};
+
+export default BoardsAPI;
 
