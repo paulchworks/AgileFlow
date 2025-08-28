@@ -180,135 +180,430 @@ Resources:
           ALLOWED_ORIGIN: !Ref AllowedOrigin
       Code:
         ZipFile: |
-          const {
-            DynamoDBClient,
-            GetItemCommand,
-            PutItemCommand,
-            DeleteItemCommand,
-            ScanCommand,
-          } = require("@aws-sdk/client-dynamodb");
-
-          const ddb = new DynamoDBClient({});
-          const TABLE = process.env.TABLE_NAME;
-
-          const ok = (body, status = 200) => ({
-            statusCode: status,
-            headers: {
-              "content-type": "application/json",
-              "access-control-allow-origin": process.env.ALLOWED_ORIGIN,
-              "access-control-allow-headers": "content-type",
-              "access-control-allow-methods": "GET,PUT,POST,DELETE,OPTIONS",
-            },
-            body: JSON.stringify(body),
-          });
-
-          exports.handler = async (event) => {
-            if (event?.requestContext?.http?.method === "OPTIONS") return ok({});
-            const routeKey = event?.routeKey;
-            const pathParameters = event?.pathParameters || {};
-            const rawBody = event?.body || "{}";
-
-            try {
-              if (routeKey === "GET /boards/{id}") {
-                const id = pathParameters.id;
-                const r = await ddb.send(
-                  new GetItemCommand({
-                    TableName: TABLE,
-                    Key: { PK: { S: `BOARD#${id}` }, SK: { S: "META#v1" } },
-                  })
-                );
-                if (!r.Item) return ok({ message: "Not found" }, 404);
-                let data = {};
-                try { data = JSON.parse(r.Item.data?.S || "{}"); } catch (_) {}
-                const updatedAt = r.Item.updatedAt?.S || null;
-                return ok({ id, data, updatedAt });
-              }
-
-              if (routeKey === "PUT /boards/{id}") {
-                const id = pathParameters.id;
-                const payload = JSON.parse(rawBody);
-                const now = new Date().toISOString();
-                await ddb.send(
-                  new PutItemCommand({
-                    TableName: TABLE,
-                    Item: {
-                      PK: { S: `BOARD#${id}` },
-                      SK: { S: "META#v1" },
-                      data: { S: JSON.stringify(payload.data || {}) },
-                      updatedAt: { S: now },
-                    },
-                  })
-                );
-                return ok({ updatedAt: now });
-              }
-
-              if (routeKey === "POST /boards") {
-                const { id, data } = JSON.parse(rawBody);
-                if (!id) return ok({ error: "id required" }, 400);
-                const now = new Date().toISOString();
-                await ddb.send(
-                  new PutItemCommand({
-                    TableName: TABLE,
-                    Item: {
-                      PK: { S: `BOARD#${id}` },
-                      SK: { S: "META#v1" },
-                      data: { S: JSON.stringify(data || {}) },
-                      updatedAt: { S: now },
-                    },
-                  })
-                );
-                return ok({ id, created: true, updatedAt: now });
-              }
-
-              if (routeKey === "DELETE /boards/{id}") {
-                const id = pathParameters.id;
-                await ddb.send(
-                  new DeleteItemCommand({
-                    TableName: TABLE,
-                    Key: { PK: { S: `BOARD#${id}` }, SK: { S: "META#v1" } },
-                  })
-                );
-                return ok({ id, deleted: true });
-              }
-
-              // NEW: list boards as "projects" for dashboard
-              if (routeKey === "GET /projects") {
-                const out = await ddb.send(
-                  new ScanCommand({
-                    TableName: TABLE,
-                    FilterExpression: "begins_with(#pk, :pk)",
-                    ExpressionAttributeNames: { "#pk": "PK", "#d": "data" },
-                    ExpressionAttributeValues: { ":pk": { S: "BOARD#" } },
-                    ProjectionExpression: "#pk, #d",
-                  })
-                );
-
-                const items = (out.Items || []).map((it) => {
-                  const id = (it.PK?.S || "").replace(/^BOARD#/, "");
-                  let board = {};
-                  try { board = JSON.parse(it.data?.S || "{}"); } catch (_) {}
-                  const meta = board?.meta || {};
-                  return {
-                    id,
-                    name: meta.name || "",
-                    description: meta.description || "",
-                    status: meta.status || "planning",
-                    start_date: meta.start_date || null,
-                    end_date: meta.end_date || null,
-                    color: meta.color || "#1e40af",
-                    team_lead: meta.team_lead || null,
-                  };
-                });
-
-                return ok({ items });
-              }
-
-              return ok({ error: "Not found" }, 404);
-            } catch (e) {
-              console.error(e);
-              return ok({ error: "Server error" }, 500);
+        // index.js — Lambda handler for API Gateway HTTP API (v2) or REST (v1) using routeKey
+        const {
+          DynamoDBClient,
+          GetItemCommand,
+          PutItemCommand,
+          DeleteItemCommand,
+          ScanCommand,
+        } = require("@aws-sdk/client-dynamodb");
+        
+        const crypto = require("crypto");
+        
+        const ddb = new DynamoDBClient({});
+        const TABLE = process.env.TABLE_NAME;
+        
+        // ────────────────────────── CORS ──────────────────────────
+        const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ||
+          "http://localhost:5173,https://d1z2fx8ojlguio.cloudfront.net"
+        )
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        
+        const pickOrigin = (event) => {
+          const o = event?.headers?.origin || event?.headers?.Origin || "";
+          return ALLOWED_ORIGINS.includes(o) ? o : ALLOWED_ORIGINS[0] || "*";
+        };
+        
+        const corsHeaders = (origin) => ({
+          "Access-Control-Allow-Origin": origin,
+          "Access-Control-Allow-Headers": "Content-Type,Authorization",
+          "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+          Vary: "Origin",
+        });
+        
+        const respond = (origin, status, body) => ({
+          statusCode: status,
+          headers: { "Content-Type": "application/json", ...corsHeaders(origin) },
+          body: typeof body === "string" ? body : JSON.stringify(body),
+        });
+        const ok = (origin, body, status = 200) => respond(origin, status, body);
+        
+        // ─────────────────────── date normalizers ───────────────────────
+        const normalizeDate = (v) => {
+          if (v === null || v === undefined || v === "") return null;
+          const d = new Date(v);
+          return Number.isNaN(d.getTime()) ? null : d.toISOString();
+        };
+        
+        const normalizeAnyDates = (obj = {}) => {
+          const out = { ...obj };
+          for (const k of Object.keys(out)) {
+            if (
+              /(^|_)(date|time)$|(_at$)|(^start$)|(^end$)|(^due$)|(^deadline$)|(^created$)|(^updated$)/i.test(
+                k
+              )
+            ) {
+              out[k] = normalizeDate(out[k]);
             }
-          };
+          }
+          return out;
+        };
+        
+        const scrubMetaDates = (data = {}) => {
+          const meta = normalizeAnyDates(data.meta || {});
+          return { ...data, meta };
+        };
+        
+        // ─────────────── Dynamo helpers (PK=TYPE#id, SK='META#v1') ───────────────
+        const PK = (type, id) => `${type.toUpperCase()}#${id}`;
+        const SK = () => "META#v1";
+        
+        const parseJSON = (s, fallback = {}) => {
+          try { return JSON.parse(s || "{}"); } catch { return fallback; }
+        };
+        
+        const genId =
+          (crypto.randomUUID && (() => crypto.randomUUID())) ||
+          (() => Math.random().toString(36).slice(2, 10));
+        
+        async function listEntities(type) {
+          const out = await ddb.send(
+            new ScanCommand({
+              TableName: TABLE,
+              FilterExpression: "begins_with(#pk, :pk)",
+              ExpressionAttributeNames: { "#pk": "PK", "#d": "data", "#u": "updatedAt" },
+              ExpressionAttributeValues: { ":pk": { S: `${type.toUpperCase()}#` } },
+              ProjectionExpression: "#pk, #d, #u",
+            })
+          );
+        
+          return (out.Items || []).map((it) => {
+            const id = (it.PK?.S || "").replace(new RegExp(`^${type.toUpperCase()}#`), "");
+            const data = parseJSON(it.data?.S, {});
+            const payload = normalizeAnyDates(data);
+            const updatedAt = it.updatedAt?.S || null;
+            return { id, ...payload, updatedAt };
+          });
+        }
+        
+        async function getEntity(type, id) {
+          const r = await ddb.send(
+            new GetItemCommand({
+              TableName: TABLE,
+              Key: { PK: { S: PK(type, id) }, SK: { S: SK() } },
+            })
+          );
+          if (!r.Item) return null;
+          const data = parseJSON(r.Item.data?.S, {});
+          const payload = normalizeAnyDates(data);
+          const updatedAt = r.Item.updatedAt?.S || null;
+          return { id, ...payload, updatedAt };
+        }
+        
+        async function putEntity(type, id, payload) {
+          const now = new Date().toISOString();
+          const cleaned = normalizeAnyDates(payload || {});
+          await ddb.send(
+            new PutItemCommand({
+              TableName: TABLE,
+              Item: {
+                PK: { S: PK(type, id) },
+                SK: { S: SK() },
+                data: { S: JSON.stringify(cleaned) },
+                updatedAt: { S: now },
+              },
+            })
+          );
+          return { id, ...cleaned, updatedAt: now };
+        }
+        
+        async function deleteEntity(type, id) {
+          await ddb.send(
+            new DeleteItemCommand({
+              TableName: TABLE,
+              Key: { PK: { S: PK(type, id) }, SK: { S: SK() } },
+            })
+          );
+          return { id, deleted: true };
+        }
+        
+        // ─────────────── HTTP helpers (stage-aware path) ───────────────
+        const getMethod = (event) => event?.requestContext?.http?.method || event?.httpMethod || "GET";
+        const getStage  = (event) => event?.requestContext?.stage || "";
+        const getRawPath = (event) =>
+          event?.rawPath ||
+          event?.requestContext?.http?.path ||
+          event?.path ||
+          "/";
+        
+        // Remove leading "/{stage}" if present; lowercase; strip trailing slash
+        const normalizedPath = (event) => {
+          const stage = getStage(event);
+          let p = getRawPath(event) || "/";
+          if (stage && p.startsWith(`/${stage}`)) {
+            p = p.slice(stage.length + 1) || "/";
+          }
+          p = p.replace(/\/+$/, "");
+          if (p === "") p = "/";
+          return p.toLowerCase();
+        };
+        
+        // ────────────────────────── Handler ──────────────────────────
+        exports.handler = async (event) => {
+          const origin = pickOrigin(event);
+        
+          // OPTIONS preflight
+          const method = getMethod(event);
+          if (method === "OPTIONS") {
+            return { statusCode: 204, headers: corsHeaders(origin), body: "" };
+          }
+        
+          const routeKey =
+            event?.routeKey || // HTTP API v2
+            (method && event?.resource ? `${method} ${event.resource}` : ""); // REST v1
+        
+          const pathParameters = event?.pathParameters || {};
+          const rawBody = event?.body || "{}";
+          let body;
+          try {
+            body = typeof rawBody === "string" ? JSON.parse(rawBody || "{}") : rawBody || {};
+          } catch {
+            body = {};
+          }
+        
+          // Stage-stripped, normalized path (e.g., "/stories" not "/prod/stories")
+          const path = normalizedPath(event);
+        
+          try {
+            // ---------------- BOARDS (explicit) ----------------
+            if (routeKey === "GET /boards/{id}") {
+              const id = pathParameters.id;
+              const r = await ddb.send(
+                new GetItemCommand({
+                  TableName: TABLE,
+                  Key: { PK: { S: `BOARD#${id}` }, SK: { S: "META#v1" } },
+                })
+              );
+              if (!r.Item) return ok(origin, { message: "Not found" }, 404);
+        
+              let data = parseJSON(r.Item.data?.S, {});
+              data.meta = normalizeAnyDates(data.meta || {});
+              const updatedAt = r.Item.updatedAt?.S || null;
+              return ok(origin, { id, data, updatedAt });
+            }
+        
+            if (routeKey === "PUT /boards/{id}") {
+              const id = pathParameters.id;
+              const now = new Date().toISOString();
+              const cleaned = scrubMetaDates(body.data || {});
+              await ddb.send(
+                new PutItemCommand({
+                  TableName: TABLE,
+                  Item: {
+                    PK: { S: `BOARD#${id}` },
+                    SK: { S: "META#v1" },
+                    data: { S: JSON.stringify(cleaned) },
+                    updatedAt: { S: now },
+                  },
+                })
+              );
+              return ok(origin, { updatedAt: now });
+            }
+        
+            if (routeKey === "POST /boards") {
+              const { id: givenId, data } = body || {};
+              if (!givenId) return ok(origin, { error: "id required" }, 400);
+        
+              const now = new Date().toISOString();
+              const cleaned = scrubMetaDates(data || {});
+              await ddb.send(
+                new PutItemCommand({
+                  TableName: TABLE,
+                  Item: {
+                    PK: { S: `BOARD#${givenId}` },
+                    SK: { S: "META#v1" },
+                    data: { S: JSON.stringify(cleaned) },
+                    updatedAt: { S: now },
+                  },
+                })
+              );
+              return ok(origin, { id: givenId, created: true, updatedAt: now });
+            }
+        
+            if (routeKey === "DELETE /boards/{id}") {
+              const id = pathParameters.id;
+              await ddb.send(
+                new DeleteItemCommand({
+                  TableName: TABLE,
+                  Key: { PK: { S: `BOARD#${id}` }, SK: { S: "META#v1" } },
+                })
+              );
+              return ok(origin, { id, deleted: true });
+            }
+        
+            // ---------------- PROJECTS (explicit list) ----------------
+            if (routeKey === "GET /projects") {
+              const out = await ddb.send(
+                new ScanCommand({
+                  TableName: TABLE,
+                  FilterExpression: "begins_with(#pk, :pk)",
+                  ExpressionAttributeNames: { "#pk": "PK", "#d": "data", "#u": "updatedAt" },
+                  ExpressionAttributeValues: { ":pk": { S: "BOARD#" } },
+                  ProjectionExpression: "#pk, #d, #u",
+                })
+              );
+        
+              const items = (out.Items || []).map((it) => {
+                const id = (it.PK?.S || "").replace(/^BOARD#/, "");
+                const board = parseJSON(it.data?.S, {});
+                const meta = normalizeAnyDates(board?.meta || {});
+                const updatedAt = it.updatedAt?.S || null;
+        
+                return {
+                  id,
+                  name: meta.name || "",
+                  description: meta.description || "",
+                  status: meta.status || "planning",
+                  start_date: normalizeDate(meta.start_date ?? meta.startDate ?? meta.start),
+                  end_date: normalizeDate(meta.end_date ?? meta.endDate ?? meta.end),
+                  color: meta.color || "#1e40af",
+                  team_lead: meta.team_lead || meta.teamLead || null,
+                  updated_at: updatedAt,
+                };
+              });
+        
+              return ok(origin, { items });
+            }
+        
+        // ---------------- PROXY FALLBACK (ANY /{proxy+} or ANY /) ----------------
+            if (routeKey === "ANY /{proxy+}" || routeKey === "ANY /") {
+              // STORIES
+              if (method === "GET" && path === "/stories") {
+                return ok(origin, { items: await listEntities("STORY") });
+              }
+              if (method === "POST" && path === "/stories") {
+                const id = body?.id || genId();
+                return ok(origin, await putEntity("STORY", id, body), 201);
+              }
+              if (path.startsWith("/stories/")) {
+                const id = path.split("/")[2];
+                if (!id) return ok(origin, { error: "Bad Request" }, 400);
+                if (method === "GET") {
+                  const item = await getEntity("STORY", id);
+                  return item ? ok(origin, item) : ok(origin, { message: "Not found" }, 404);
+                }
+                if (method === "DELETE") return ok(origin, await deleteEntity("STORY", id));
+                if (method === "PUT" || method === "PATCH") {
+                  return ok(origin, await putEntity("STORY", id, body));
+                }
+              }
+        
+              // ISSUES
+              if (method === "GET" && path === "/issues") {
+                return ok(origin, { items: await listEntities("ISSUE") });
+              }
+              if (method === "POST" && path === "/issues") {
+                const id = body?.id || genId();
+                return ok(origin, await putEntity("ISSUE", id, body), 201);
+              }
+              if (path.startsWith("/issues/")) {
+                const id = path.split("/")[2];
+                if (!id) return ok(origin, { error: "Bad Request" }, 400);
+                if (method === "GET") {
+                  const item = await getEntity("ISSUE", id);
+                  return item ? ok(origin, item) : ok(origin, { message: "Not found" }, 404);
+                }
+                if (method === "DELETE") return ok(origin, await deleteEntity("ISSUE", id));
+                if (method === "PUT" || method === "PATCH") {
+                  return ok(origin, await putEntity("ISSUE", id, body));
+                }
+              }
+        
+              // SPRINTS
+              if (method === "GET" && path === "/sprints") {
+                return ok(origin, { items: await listEntities("SPRINT") });
+              }
+              if (method === "POST" && path === "/sprints") {
+                const id = body?.id || genId();
+                return ok(origin, await putEntity("SPRINT", id, body), 201);
+              }
+              if (path.startsWith("/sprints/")) {
+                const id = path.split("/")[2];
+                if (!id) return ok(origin, { error: "Bad Request" }, 400);
+                if (method === "GET") {
+                  const item = await getEntity("SPRINT", id);
+                  return item ? ok(origin, item) : ok(origin, { message: "Not found" }, 404);
+                }
+                if (method === "DELETE") return ok(origin, await deleteEntity("SPRINT", id));
+                if (method === "PUT" || method === "PATCH") {
+                  return ok(origin, await putEntity("SPRINT", id, body));
+                }
+              }
+        
+              // EPICS
+              if (method === "GET" && path === "/epics") {
+                return ok(origin, { items: await listEntities("EPIC") });
+              }
+              if (method === "POST" && path === "/epics") {
+                const id = body?.id || genId();
+                return ok(origin, await putEntity("EPIC", id, body), 201);
+              }
+              if (path.startsWith("/epics/")) {
+                const id = path.split("/")[2];
+                if (!id) return ok(origin, { error: "Bad Request" }, 400);
+                if (method === "GET") {
+                  const item = await getEntity("EPIC", id);
+                  return item ? ok(origin, item) : ok(origin, { message: "Not found" }, 404);
+                }
+                if (method === "DELETE") return ok(origin, await deleteEntity("EPIC", id));
+                if (method === "PUT" || method === "PATCH") {
+                  return ok(origin, await putEntity("EPIC", id, body));
+                }
+              }
+        
+              // TASKS  ← NEW
+              if (method === "GET" && path === "/tasks") {
+                return ok(origin, { items: await listEntities("TASK") });
+              }
+              if (method === "POST" && path === "/tasks") {
+                const id = body?.id || genId();
+                return ok(origin, await putEntity("TASK", id, body), 201);
+              }
+              if (path.startsWith("/tasks/")) {
+                const id = path.split("/")[2];
+                if (!id) return ok(origin, { error: "Bad Request" }, 400);
+                if (method === "GET") {
+                  const item = await getEntity("TASK", id);
+                  return item ? ok(origin, item) : ok(origin, { message: "Not found" }, 404);
+                }
+                if (method === "DELETE") return ok(origin, await deleteEntity("TASK", id));
+                if (method === "PUT" || method === "PATCH") {
+                  return ok(origin, await putEntity("TASK", id, body));
+                }
+              }
+        
+              // USERS  ← NEW
+              if (method === "GET" && path === "/users") {
+                return ok(origin, { items: await listEntities("USER") });
+              }
+              if (method === "POST" && path === "/users") {
+                const id = body?.id || genId();
+                return ok(origin, await putEntity("USER", id, body), 201);
+              }
+              if (path.startsWith("/users/")) {
+                const id = path.split("/")[2];
+                if (!id) return ok(origin, { error: "Bad Request" }, 400);
+                if (method === "GET") {
+                  const item = await getEntity("USER", id);
+                  return item ? ok(origin, item) : ok(origin, { message: "Not found" }, 404);
+                }
+                if (method === "DELETE") return ok(origin, await deleteEntity("USER", id));
+                if (method === "PUT" || method === "PATCH") {
+                  return ok(origin, await putEntity("USER", id, body));
+                }
+              }
+            }
+        
+            // ---------------- Not found ----------------
+            return ok(origin, { error: "Not Found", method, path, routeKey }, 404);
+          } catch (e) {
+            console.error(e);
+            return ok(origin, { error: "Server error" }, 500);
+          }
+        };
 
   HttpApi:
     Type: AWS::ApiGatewayV2::Api
