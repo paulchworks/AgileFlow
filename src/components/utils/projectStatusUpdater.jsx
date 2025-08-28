@@ -1,53 +1,65 @@
-import Project, { Sprint } from "@/api/entities";
-const ProjectSvc = (typeof window !== 'undefined' && window.__AgileFlowProjectAPI) || Project;
+// src/components/utils/projectStatusUpdater.jsx
+import Project from "@/api/entities";
 
-export const updateProjectStatus = async (projectId) => {
+// helpers
+const arr = (v) => (Array.isArray(v) ? v : Array.isArray(v?.items) ? v.items : []);
+const toISOorNull = (v) => {
+  if (!v) return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+};
+
+/**
+ * Update every project's status based on dates:
+ * - if end date in the past: "completed"
+ * - else if start date in the past: "in-progress"
+ * - else "planning"
+ */
+export async function updateAllProjectStatuses() {
   try {
-    const [project, sprints] = await Promise.all([
-      ProjectSvc.list().then(projects => projects.find(p => p.id === projectId)),
-      Sprint.filter({ project_id: projectId })
-    ]);
+    let projects = await Project.list();
+    projects = arr(projects).map((p) => ({
+      ...p,
+      start_date: toISOorNull(p.start_date ?? p.startDate),
+      end_date: toISOorNull(p.end_date ?? p.endDate),
+    }));
 
-    if (!project) return;
+    const now = Date.now();
 
-    let newStatus = ProjectSvc.status;
+    for (const p of projects) {
+      const start = p.start_date ? new Date(p.start_date).getTime() : null;
+      const end = p.end_date ? new Date(p.end_date).getTime() : null;
 
-    if (sprints.length === 0) {
-      // No sprints exist - keep in planning
-      newStatus = "planning";
-    } else {
-      const activeSprints = sprints.filter(s => s.status === 'active');
-      const completedSprints = sprints.filter(s => s.status === 'completed');
-      
-      if (activeSprints.length > 0) {
-        // At least one active sprint - project is active
-        newStatus = "active";
-      } else if (completedSprints.length === sprints.length && sprints.length > 0) {
-        // All sprints are completed - project is completed
-        newStatus = "completed";
-      } else {
-        // Sprints exist but none are active (planning/paused state)
-        newStatus = "planning";
+      let nextStatus = "planning";
+      if (end && end < now) nextStatus = "completed";
+      else if (start && start <= now) nextStatus = "in-progress";
+
+      if (nextStatus !== p.status) {
+        await Project.update(p.id, { status: nextStatus });
       }
     }
-
-    // Only update if status actually changed
-    if (newStatus !== ProjectSvc.status) {
-      await ProjectSvc.update(projectId, { ...project, status: newStatus });
-      console.log(`Project ${ProjectSvc.name} status updated from ${ProjectSvc.status} to ${newStatus}`);
-    }
-  } catch (error) {
-    console.error("Error updating project status:", error);
+  } catch (e) {
+    console.error("Error updating project status:", e);
   }
-};
+}
 
-export const updateAllProjectStatuses = async () => {
-  try {
-    const projects = await ProjectSvc.list();
-    for (const project of projects) {
-      await updateProjectStatus(ProjectSvc.id);
+/**
+ * Back-compat wrapper for places that call `updateProjectStatus(...)`.
+ * - If called with (projectId, status), update that project only.
+ * - If called with no args, run the bulk updater.
+ */
+export async function updateProjectStatus(projectId, status) {
+  if (projectId && status) {
+    try {
+      await Project.update(projectId, { status });
+    } catch (e) {
+      console.error("Error updating single project status:", e);
     }
-  } catch (error) {
-    console.error("Error updating all project statuses:", error);
+    return;
   }
-};
+  // No args -> behave like old bulk function
+  return updateAllProjectStatuses();
+}
+
+// Optional default export for convenience
+export default updateAllProjectStatuses;
