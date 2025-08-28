@@ -13,10 +13,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 // Mock data to showcase the component if no users are available.
 const mockUsers = [
-    { id: 'mock1', full_name: 'Sarah Johnson', email: 'sarah.johnson@company.com', job_title: 'Lead Developer', user_type: 'internal', skills: ['React', 'Node.js', 'GraphQL', 'AWS'], avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=200' },
-    { id: 'mock2', full_name: 'Mike Chen', email: 'mike.chen@company.com', job_title: 'Mobile Lead', user_type: 'internal', skills: ['Swift', 'Kotlin', 'Firebase'], avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200' },
-    { id: 'mock3', full_name: 'Alex Rodriguez', email: 'alex.rodriguez@company.com', job_title: 'Data Scientist', user_type: 'internal', skills: ['Python', 'TensorFlow', 'SQL'], avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200' },
-    { id: 'mock4', full_name: 'Creative Minds Inc.', email: 'contact@creativeminds.co', job_title: 'UI/UX Design Consultant', user_type: 'external', skills: ['Figma', 'User Research', 'Prototyping'], avatar_url: 'https://images.unsplash.com/photo-1581093450021-4a7360e9a6b5?q=80&w=200' }
+    { id: 'mock1', full_name: 'Sarah Johnson', email: 'sarah.johnson@company.com', job_title: 'Lead Developer', user_type: 'internal', skills: ['React', 'Node.js', 'GraphQL', 'AWS'], avatar_url: '/avatars/sarah.jpg' },
+    { id: 'mock2', full_name: 'Mike Chen', email: 'mike.chen@company.com', job_title: 'Mobile Lead', user_type: 'internal', skills: ['Swift', 'Kotlin', 'Firebase'], avatar_url: '/avatars/mike.jpg' },
+    { id: 'mock3', full_name: 'Alex Rodriguez', email: 'alex.rodriguez@company.com', job_title: 'Data Scientist', user_type: 'internal', skills: ['Python', 'TensorFlow', 'SQL'], avatar_url: '/avatars/alex.jpg' },
+    { id: 'mock4', full_name: 'Transform Inc', email: 'consult@paulchworks.com', job_title: 'UI/UX Design Consultant', user_type: 'external', skills: ['Figma', 'User Research', 'Prototyping'], avatar_url: '/avatars/team.jpg' }
 ];
 
 export default function Team() {

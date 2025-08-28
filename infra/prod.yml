@@ -1,0 +1,293 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AgileFlow prod (S3+CloudFront+HTTP API+Lambda+DynamoDB)
+
+Parameters:
+  AppName:
+    Type: String
+    Default: agileflow
+  AllowedOrigin:
+    Description: CORS allow-origin for API (set to CloudFront URL after first deploy)
+    Type: String
+    Default: "*"
+  ApiAllowedOrigin:
+    Description: Same as AllowedOrigin (used in CSP connect-src)
+    Type: String
+    Default: "https://example.execute-api.ap-southeast-1.amazonaws.com" # placeholder
+
+Resources:
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AppName}-site-${AWS::AccountId}"
+      OwnershipControls: { Rules: [{ ObjectOwnership: BucketOwnerPreferred }] }
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  OAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${AppName}-oac"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+        Description: OAC for S3 origin
+
+  # Response headers policy with CSP; connect-src locked to API later
+  RespHeadersPolicy:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: !Sub "${AppName}-csp"
+        Comment: Strict CSP for AgileFlow
+        CorsConfig:
+          AccessControlAllowCredentials: false
+          AccessControlAllowHeaders:
+            Items:
+              - "*"
+          AccessControlAllowMethods:
+            Items:
+              - GET
+              - HEAD
+              - OPTIONS
+          AccessControlAllowOrigins:
+            Items:
+              - "*"
+          OriginOverride: true
+        SecurityHeadersConfig:
+          ContentSecurityPolicy:
+            Override: true
+            # keep this on ONE line to avoid YAML parsing quirks
+            ContentSecurityPolicy: !Sub "default-src 'self'; connect-src 'self' ${ApiAllowedOrigin}; img-src 'self' data:; font-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline';"
+          FrameOptions:
+            FrameOption: SAMEORIGIN
+            Override: true
+          ReferrerPolicy:
+            ReferrerPolicy: no-referrer
+            Override: true
+          StrictTransportSecurity:
+            AccessControlMaxAgeSec: 63072000
+            IncludeSubdomains: true
+            Preload: true
+            Override: true
+          XSSProtection:
+            Protection: true
+            ModeBlock: true
+            Override: true
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        DefaultCacheBehavior:
+          TargetOriginId: siteOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          CachedMethods: [GET, HEAD, OPTIONS]
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6  # AWS Managed: CachingOptimized
+          ResponseHeadersPolicyId: !GetAtt RespHeadersPolicy.Id
+        Origins:
+          - Id: siteOrigin
+            DomainName: !GetAtt SiteBucket.RegionalDomainName
+            S3OriginConfig: {}
+            OriginAccessControlId: !GetAtt OAC.Id
+        CustomErrorResponses:
+          - ErrorCode: 404
+            ResponsePagePath: /index.html
+            ResponseCode: 200
+            ErrorCachingMinTTL: 0
+
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SiteBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontRead
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "${SiteBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+
+  BoardsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AppName}-boards"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+
+  ApiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ddb-access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:DeleteItem
+                Resource: !GetAtt BoardsTable.Arn
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+
+  ApiFn:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${AppName}-api"
+      Runtime: nodejs18.x
+      Handler: index.handler
+      Role: !GetAtt ApiRole.Arn
+      Timeout: 10
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref BoardsTable
+          ALLOWED_ORIGIN: !Ref AllowedOrigin
+      Code:
+        ZipFile: |
+          const { DynamoDBClient, GetItemCommand, PutItemCommand, DeleteItemCommand } = require("@aws-sdk/client-dynamodb");
+          const ddb = new DynamoDBClient({});
+          const TABLE = process.env.TABLE_NAME;
+          const ok = (body, status=200) => ({
+            statusCode: status,
+            headers: {
+              "content-type": "application/json",
+              "access-control-allow-origin": process.env.ALLOWED_ORIGIN,
+              "access-control-allow-headers": "content-type",
+              "access-control-allow-methods": "GET,PUT,POST,DELETE,OPTIONS"
+            },
+            body: JSON.stringify(body)
+          });
+          exports.handler = async (event) => {
+            if (event.requestContext.http.method === "OPTIONS") return ok({});
+            const { routeKey, pathParameters, body } = event;
+            try {
+              if (routeKey === "GET /boards/{id}") {
+                const id = pathParameters.id;
+                const r = await ddb.send(new GetItemCommand({ TableName: TABLE, Key: { PK:{S:`BOARD#${id}`}, SK:{S:"META#v1"} } }));
+                return r.Item ? ok({ id, data: JSON.parse(r.Item.data.S), updatedAt: r.Item.updatedAt.S }) : ok({ message:"Not found" }, 404);
+              }
+              if (routeKey === "PUT /boards/{id}") {
+                const id = pathParameters.id;
+                const payload = JSON.parse(body || "{}");
+                await ddb.send(new PutItemCommand({
+                  TableName: TABLE,
+                  Item: {
+                    PK: { S: `BOARD#${id}` },
+                    SK: { S: "META#v1" },
+                    data: { S: JSON.stringify(payload.data||{}) },
+                    updatedAt: { S: new Date().toISOString() }
+                  }
+                }));
+                return ok({ updatedAt: new Date().toISOString() });
+              }
+              if (routeKey === "POST /boards") {
+                const { id, data } = JSON.parse(body || "{}");
+                if (!id) return ok({ error: "id required" }, 400);
+                await ddb.send(new PutItemCommand({
+                  TableName: TABLE,
+                  Item: {
+                    PK: { S: `BOARD#${id}` },
+                    SK: { S: "META#v1" },
+                    data: { S: JSON.stringify(data||{}) },
+                    updatedAt: { S: new Date().toISOString() }
+                  }
+                }));
+                return ok({ id, created: true });
+              }
+              if (routeKey === "DELETE /boards/{id}") {
+                const id = pathParameters.id;
+                await ddb.send(new DeleteItemCommand({ TableName: TABLE, Key: { PK:{S:`BOARD#${id}`}, SK:{S:"META#v1"} } }));
+                return ok({ id, deleted: true });
+              }
+              return ok({ error: "Not found" }, 404);
+            } catch (e) {
+              console.error(e);
+              return ok({ error: "Server error" }, 500);
+            }
+          };
+
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub "${AppName}-http"
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins: [ !Ref AllowedOrigin ]
+        AllowMethods: [ GET, POST, PUT, DELETE, OPTIONS ]
+        AllowHeaders: [ content-type ]
+
+  ApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiFn.Arn}/invocations"
+      PayloadFormatVersion: "2.0"
+
+  RouteGet:
+    Type: AWS::ApiGatewayV2::Route
+    Properties: { ApiId: !Ref HttpApi, RouteKey: "GET /boards/{id}", Target: !Sub "integrations/${ApiIntegration}" }
+  RoutePut:
+    Type: AWS::ApiGatewayV2::Route
+    Properties: { ApiId: !Ref HttpApi, RouteKey: "PUT /boards/{id}", Target: !Sub "integrations/${ApiIntegration}" }
+  RoutePost:
+    Type: AWS::ApiGatewayV2::Route
+    Properties: { ApiId: !Ref HttpApi, RouteKey: "POST /boards", Target: !Sub "integrations/${ApiIntegration}" }
+  RouteDelete:
+    Type: AWS::ApiGatewayV2::Route
+    Properties: { ApiId: !Ref HttpApi, RouteKey: "DELETE /boards/{id}", Target: !Sub "integrations/${ApiIntegration}" }
+
+  ApiPermInvoke:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ApiFn
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/*/*"
+
+  ApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: prod
+      AutoDeploy: true
+
+Outputs:
+  CloudFrontURL:
+    Value: !Sub "https://${Distribution.DomainName}"
+  ApiBaseURL:
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
+  SiteBucketName:
+    Value: !Ref SiteBucket
