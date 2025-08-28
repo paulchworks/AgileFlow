@@ -1,4 +1,4 @@
-// src/api/entities.js
+// Route all data calls to your AWS API (API Gateway + Lambda + DynamoDB)
 import { BoardsAPI } from '../lib/apiClient';
 
 const projectToBoard = (p) => ({
@@ -24,8 +24,11 @@ const boardToProject = (board, id) => ({ id, ...(board?.meta ?? {}) });
 const genId = () => (crypto?.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2,10));
 
 export const Project = {
-  async list() { return []; }, // stub to unblock dashboards
-  async create(projectData) {
+  async list() {                 // <- EXISTS
+    // placeholder until you add a real GET /projects
+    return [];
+  },
+  async create(projectData) {    // <- EXISTS
     const id = projectData?.id || genId();
     const board = projectToBoard(projectData || {});
     await BoardsAPI.create(id, board);
@@ -43,11 +46,15 @@ export const Project = {
     const saved = await BoardsAPI.save(id, next, cur.updatedAt);
     return { id, ...(next.meta||{}), updatedAt: saved?.updatedAt };
   },
-  async delete(id) { await BoardsAPI.del(id); return { id, deleted: true }; }
+  async delete(id) {
+    await BoardsAPI.del(id);
+    return { id, deleted: true };
+  }
 };
 
-export default Project; // default export must have .list/.create etc.
+export default Project; // default export is what the app expects
 
+// Optional shims for any other imports
 export const Board = {
   get:(id)=>BoardsAPI.get(id),
   create:(id,d)=>BoardsAPI.create(id,d),
@@ -60,3 +67,6 @@ export const Epic   = {};
 export const Issue  = {};
 export const Task   = {};
 export const User   = {};
+
+// Safety: expose for quick runtime verification
+if (typeof window !== 'undefined') window.__AgileFlowProjectAPI = Project;
