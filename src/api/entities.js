@@ -23,7 +23,9 @@ const boardToProject = (board, id) => ({ id, ...(board?.meta ?? {}) });
 const genId = () => (crypto?.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2, 10));
 
 export const Project = {
-  async list() { return []; }, // safe stub so dashboards don’t crash
+  async list() {             // <— REQUIRED by dashboard/quick stats
+    return [];               // stub until you add GET /projects
+  },
   async create(projectData) {
     const id = projectData?.id || genId();
     const board = projectToBoard(projectData || {});
@@ -48,9 +50,8 @@ export const Project = {
   },
 };
 
-export default Project;
+export default Project; // default export is the service (has .list/.create)
 
-// optional shims (harmless if unused)
 export const Board = {
   get: (id) => BoardsAPI.get(id),
   create: (id, d) => BoardsAPI.create(id, d),
@@ -64,5 +65,4 @@ export const Issue  = {};
 export const Task   = {};
 export const User   = {};
 
-// runtime probe (lets you verify in console)
-if (typeof window !== 'undefined') window.__AgileFlowProjectAPI = Project;
+if (typeof window !== 'undefined') window.__AgileFlowProjectAPI = Project; // runtime probe

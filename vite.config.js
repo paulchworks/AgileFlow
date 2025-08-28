@@ -7,12 +7,8 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: '@', replacement: path.resolve(__dirname, './src') },
-
-      // direct hits
       { find: '@/api',             replacement: path.resolve(__dirname, './src/api/index.js') },
       { find: '@/api/entities',    replacement: path.resolve(__dirname, './src/api/entities.js') },
-
-      // common variations
       { find: 'src/api',           replacement: path.resolve(__dirname, './src/api/index.js') },
       { find: 'src/api/entities',  replacement: path.resolve(__dirname, './src/api/entities.js') },
       { find: '/src/api',          replacement: path.resolve(__dirname, './src/api/index.js') },
