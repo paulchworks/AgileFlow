@@ -5,6 +5,57 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatDistanceToNow } from "date-fns";
 import { Bug, ClipboardList, ArrowUp, AlertTriangle } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { toValidDate, formatDateTime } from '@/utils/date';
+
+// pick the best timestamp a row has
+const pickIssueTimestamp = (issue) =>
+  issue?.updated_date ??
+  issue?.updatedAt ??
+  issue?.updated_at ??
+  issue?.last_activity_at ??
+  issue?.createdAt ??
+  issue?.created_at ??
+  issue?.dueDate ??
+  issue?.due_date ??
+  null;
+
+const timeAgo = (input) => {
+  const d = toValidDate(input);
+  if (!d) return '—';
+  try {
+    return formatDistanceToNow(d, { addSuffix: true });
+  } catch {
+    return '—';
+  }
+};
+
+// Robust initial extractor
+const _toStringVal = (x) => {
+  if (x == null) return '';
+  if (typeof x === 'string' || typeof x === 'number') return String(x);
+  if (Array.isArray(x)) return _toStringVal(x[0]);
+  if (typeof x === 'object') {
+    const cand = x.name ?? x.displayName ?? x.fullName ?? x.username ?? x.email ?? x.assignee ?? '';
+    return typeof cand === 'string' ? cand : '';
+  }
+  return String(x);
+};
+
+export const getInitial = (val, fallback = 'U') => {
+  const raw = _toStringVal(val).trim();
+  if (!raw) return fallback;
+
+  // Strip email domain if it's an email
+  const base = raw.includes('@') ? raw.split('@')[0] : raw;
+
+  // First token (first word) then first Unicode char (works for emoji)
+  const firstToken = base.split(/\s+/)[0];
+  const firstChar = Array.from(firstToken)[0] ?? '';
+  return firstChar ? firstChar.toUpperCase() : fallback;
+};
+
+
+const asArray = (v) => (Array.isArray(v) ? v : v == null ? [] : [v]);
 
 const priorityColors = {
   high: "text-red-600",
@@ -120,7 +171,7 @@ export default function IssueTable({ issues, onEdit, isLoading, users, projects 
                       <Avatar className="h-6 w-6">
                         <AvatarImage src={assignee.avatar_url} />
                         <AvatarFallback className="text-xs">
-                          {assignee.full_name[0]}
+                          {getInitial(assignee.full_name)}
                         </AvatarFallback>
                       </Avatar>
                       <span className="text-slate-800">{assignee.full_name}</span>
@@ -130,7 +181,10 @@ export default function IssueTable({ issues, onEdit, isLoading, users, projects 
                   )}
                 </TableCell>
                 <TableCell className="text-slate-700">
-                  {formatDistanceToNow(new Date(issue.updated_date), { addSuffix: true })}
+                  {(() => {
+                    const ts = pickIssueTs(issue);
+                    return toValidDate(ts) ? timeAgo(ts) : formatDateTime(ts);
+                    })()}
                 </TableCell>
               </TableRow>
             );
