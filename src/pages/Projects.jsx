@@ -26,7 +26,7 @@ export default function Projects() {
     setIsLoading(true);
     try {
       const [projectsData, storiesData] = await Promise.all([
-        ProjectSvc.list("-created_date"),
+        Project.list("-created_date"),
         Story.list()
       ]);
       setProjects(projectsData);
@@ -40,9 +40,9 @@ export default function Projects() {
   const handleSubmit = async (projectData) => {
     try {
       if (editingProject) {
-        await ProjectSvc.update(editingProjectSvc.id, projectData);
+        await Project.update(editingProject.id, projectData);
       } else {
-        await ProjectSvc.create(projectData);
+        await Project.create(projectData);
       }
       setShowForm(false);
       setEditingProject(null);
@@ -105,9 +105,9 @@ export default function Projects() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {projects.map((project) => (
             <ProjectCard
-              key={ProjectSvc.id}
+              key={Project.id}
               project={project}
-              stories={stories.filter(s => s.project_id === ProjectSvc.id)}
+              stories={stories.filter(s => s.project_id === Project.id)}
               onEdit={handleEdit}
               isLoading={isLoading}
             />
