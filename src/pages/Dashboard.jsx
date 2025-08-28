@@ -1,21 +1,22 @@
-import { formatDistanceToNow, formatDistance, format } from '@/lib/dates';
+// src/pages/Dashboard.jsx (or wherever your Dashboard lives)
 
 import React, { useState, useEffect } from "react";
+import { toValidDate } from "@/utils/date";
+
 import Project, { Sprint, Story } from "@/api/entities";
-const ProjectSvc = (typeof window !== 'undefined' && window.__AgileFlowProjectAPI) || Project;
 import { updateAllProjectStatuses } from "@/components/utils/projectStatusUpdater";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { 
-  TrendingUp, 
-  Target, 
-  Clock, 
-  CheckCircle, 
+
+import {
+  TrendingUp,
+  Target,
+  CheckCircle,
   Plus,
-  ArrowRight,
-  Zap
+  Zap,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -24,54 +25,74 @@ import ActiveSprintCard from "../components/dashboard/ActiveSprintCard";
 import RecentActivity from "../components/dashboard/RecentActivity";
 import ProjectOverview from "../components/dashboard/ProjectOverview";
 
+// ---- helpers ---------------------------------------------------------------
+
+const toArray = (x) => (Array.isArray(x) ? x : x?.items ? x.items : []);
+
+// pick a reasonable timestamp field from various shapes
+const pickTs = (x) =>
+  toValidDate(
+    x?.updated_date ?? x?.updatedAt ?? x?.updated_at ??
+    x?.created_date ?? x?.createdAt ?? x?.created_at ??
+    x?.updated ?? x?.created
+  )?.getTime() ?? 0;
+
+// ---------------------------------------------------------------------------
+
 export default function Dashboard() {
   const [projects, setProjects] = useState([]);
   const [sprints, setSprints] = useState([]);
   const [stories, setStories] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
     setIsLoading(true);
     try {
-      // Update all project statuses first to ensure consistency
+      // Ensure project meta/statuses are up to date
       await updateAllProjectStatuses();
-      
-      const [projectsData, sprintsData, storiesData] = await Promise.all([
-        ProjectSvc.list("-created_date"),
-        Sprint.list("-created_date"),
-        Story.list("-updated_date", 20)
+
+      // ⚠️ No more string "sort" args; fetch plain lists and sort locally
+      const [projectsRaw, sprintsRaw, storiesRaw] = await Promise.all([
+        Project.list(),
+        Sprint.list(),
+        Story.list(),
       ]);
-      
-      setProjects(projectsData);
-      setSprints(sprintsData);
-      setStories(storiesData);
+
+      const projectsSorted = toArray(projectsRaw).slice().sort((a, b) => pickTs(b) - pickTs(a));
+      const sprintsSorted  = toArray(sprintsRaw).slice().sort((a, b) => pickTs(b) - pickTs(a));
+      const storiesSorted  = toArray(storiesRaw).slice().sort((a, b) => pickTs(b) - pickTs(a)).slice(0, 20);
+
+      setProjects(projectsSorted);
+      setSprints(sprintsSorted);
+      setStories(storiesSorted);
     } catch (error) {
       console.error("Error loading dashboard data:", error);
+      // keep UI usable even if one call failed
+      setProjects((prev) => prev ?? []);
+      setSprints((prev) => prev ?? []);
+      setStories((prev) => prev ?? []);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
-  const activeProjects = projects.filter(p => p.status === 'active');
-  const activeSprints = sprints.filter(s => s.status === 'active');
-  const completedStories = stories.filter(s => s.status === 'done');
+  const activeProjects = projects.filter((p) => p.status === "active");
+  const activeSprints  = sprints.filter((s) => s.status === "active");
+  const completedStories = stories.filter((s) => s.status === "done");
   const totalStoryPoints = stories.reduce((sum, s) => sum + (s.story_points || 0), 0);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 p-6">
       <div className="max-w-7xl mx-auto">
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-4"
         >
           <div>
-            <h1 className="text-4xl font-bold text-slate-900 mb-2">
-              Project Dashboard
-            </h1>
+            <h1 className="text-4xl font-bold text-slate-900 mb-2">Project Dashboard</h1>
             <p className="text-slate-700 text-lg">Monitor your agile workflow and team progress</p>
           </div>
           <Link to={createPageUrl("Projects")}>
@@ -119,21 +140,21 @@ export default function Dashboard() {
 
         <div className="grid lg:grid-cols-3 gap-6 mb-8">
           <div className="lg:col-span-2">
-            <ActiveSprintCard 
+            <ActiveSprintCard
               sprints={activeSprints}
               stories={stories}
               isLoading={isLoading}
             />
           </div>
           <div>
-            <RecentActivity 
+            <RecentActivity
               stories={stories.slice(0, 8)}
               isLoading={isLoading}
             />
           </div>
         </div>
 
-        <ProjectOverview 
+        <ProjectOverview
           projects={activeProjects}
           stories={stories}
           isLoading={isLoading}

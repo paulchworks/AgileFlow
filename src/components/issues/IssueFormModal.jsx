@@ -30,21 +30,38 @@ export default function IssueFormModal({ issue, onSubmit, onClose, projects, use
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (formData.project_id) {
-      loadProjectData();
-    }
-  }, [formData.project_id]);
+    loadProjectData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData?.project_id]);
 
   const loadProjectData = async () => {
     try {
-      const [epicsData, storiesData] = await Promise.all([
-        Epic.filter({ project_id: formData.project_id }),
-        Story.filter({ project_id: formData.project_id })
+      const pid = formData?.project_id;
+      if (!pid) {
+        setEpics([]);
+        setStories([]);
+        return;
+      }
+
+      // fetch all, then filter locally
+      const [epicsRaw, storiesRaw] = await Promise.all([
+        Epic.list(),
+        Story.list(),
       ]);
+
+      // normalize possible return shapes: array or { items: [] }
+      const toArray = (x) => Array.isArray(x) ? x : (x?.items ?? []);
+      const sameId = (a, b) => String(a ?? '') === String(b ?? '');
+
+      const epicsData = toArray(epicsRaw).filter(e => sameId(e.project_id, pid));
+      const storiesData = toArray(storiesRaw).filter(s => sameId(s.project_id, pid));
+
       setEpics(epicsData);
       setStories(storiesData);
     } catch (error) {
       console.error("Error loading project data:", error);
+      setEpics([]);
+      setStories([]);
     }
   };
 

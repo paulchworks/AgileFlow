@@ -1,5 +1,6 @@
 // src/api/entities.js
 import { BoardsAPI } from '../lib/apiClient';
+import { api } from '@/lib/http'; // <-- use the centralized /api prefix
 
 // ---------- generic date helpers ----------
 const toISOorNull = (v) => {
@@ -49,18 +50,6 @@ const shapeProject = (it = {}) => {
   };
 };
 
-const apiBase = () => {
-  const fromWin =
-    typeof window !== "undefined" ? window.__APP_API_BASE : "";
-  const fromEnv =
-    typeof import.meta !== "undefined" && import.meta.env
-      ? import.meta.env.VITE_API_BASE
-      : "";
-  const base = (fromWin || fromEnv || "").replace(/\/+$/, "");
-  if (!base) console.warn("[AgileFlow] API base is not configured");
-  return base;
-};
-
 // ---------- board <-> project shaping ----------
 const projectToBoard = (p) => ({
   meta: shapeProject({
@@ -88,15 +77,13 @@ const genId = () =>
 
 // ---------- canonical Project service ----------
 const RawProject = {
-  async list() {
-    const base = apiBase();
-    if (!base) return []; // avoid hitting CloudFront with a relative /projects
-    const res = await fetch(`${base}/projects`, { method: "GET" });
-    if (!res.ok) throw new Error(`list failed: ${res.status}`);
-    const json = await res.json();
+  async list(params) {
+    // Use shared api() (relative /api). Supports optional query params.
+    const qs = params && Object.keys(params).length ? `?${new URLSearchParams(params)}` : '';
+    const json = await api(`/projects${qs}`);
     const raw = Array.isArray(json) ? json : Array.isArray(json?.items) ? json.items : [];
     return raw.map(shapeProject);
-},
+  },
 
   async create(projectData) {
     const id = projectData?.id || genId();
@@ -149,21 +136,59 @@ const Project = new Proxy(RawProject, {
   }
 });
 
-// ---------- stubs for other entities (delegate to Project.list) ----------
-const stub = (name) => ({
-  async list()   { return Project.list(); },
-  async get()    { return null; },
-  async create() { throw new Error(`${name}.create not implemented`); },
-  async update() { throw new Error(`${name}.update not implemented`); },
-  async delete() { throw new Error(`${name}.delete not implemented`); },
-});
+// ---------- generic REST service factory for other entities ----------
+const toArray = (x) => (Array.isArray(x) ? x : (x?.items ?? []));
+// replace existing qs() with this:
+const qs = (params) => {
+  const out = [];
+  for (const [k, v] of Object.entries(params || {})) {
+    // drop undefined/null/empty-string
+    if (v === undefined || v === null) continue;
+    const s = String(v).trim();
+    if (!s) continue;
 
-export const Sprint = stub('Sprint');
-export const Story  = stub('Story');
-export const Epic   = stub('Epic');
-export const Issue  = stub('Issue');
-export const Task   = stub('Task');
-export const User   = stub('User');
+    // (optional) block unsupported sort syntax like "-created_date"
+    // if your backend doesn't accept it:
+    if (k.startsWith('-')) continue;
+
+    out.push([k, s]);
+  }
+  return out.length ? `?${new URLSearchParams(out)}` : '';
+};
+
+
+const makeSvc = (windowKey, basePath, shaper) => {
+  const ext = (typeof window !== 'undefined' && window[windowKey]) || null;
+
+  const svc = ext || {
+    async list(params)   { const data = await api(`${basePath}${qs(params)}`); return shaper ? toArray(data).map(shaper) : toArray(data); },
+    async get(id)        { const data = await api(`${basePath}/${id}`);       return shaper ? shaper(data) : data; },
+    async create(payload){ const data = await api(`${basePath}`, { method: 'POST', body: JSON.stringify(payload) }); return shaper ? shaper(data) : data; },
+    async update(id,pay) { const data = await api(`${basePath}/${id}`, { method: 'PUT', body: JSON.stringify(pay) }); return shaper ? shaper(data) : data; },
+    async delete(id)     { const data = await api(`${basePath}/${id}`, { method: 'DELETE' }); return data; },
+    // convenience to match earlier calls like Epic.filter({ project_id })
+    async filter(params) { return this.list(params); },
+  };
+
+  return new Proxy(svc, {
+    get(target, prop, receiver) {
+      if (prop === 'list' && typeof target.list !== 'function') return async () => [];
+      if (prop === 'filter' && typeof target.filter !== 'function') return async () => [];
+      return Reflect.get(target, prop, receiver);
+    }
+  });
+};
+
+// Shape functions (light normalization – you can expand later if needed)
+const shapeCommon = (it = {}) => normalizeDatesInObject(it);
+
+// Export real services (REST via /api/*); window overrides still supported if present
+export const Issue  = makeSvc('__AgileFlowIssueAPI',  '/issues',  shapeCommon);
+export const Epic   = makeSvc('__AgileFlowEpicAPI',   '/epics',   shapeCommon);
+export const Story  = makeSvc('__AgileFlowStoryAPI',  '/stories', shapeCommon);
+export const Sprint = makeSvc('__AgileFlowSprintAPI', '/sprints', shapeCommon);
+export const Task   = makeSvc('__AgileFlowTaskAPI',   '/tasks',   shapeCommon);
+export const User   = makeSvc('__AgileFlowUserAPI',   '/users',   shapeCommon);
 
 export { Project };
 export default Project;

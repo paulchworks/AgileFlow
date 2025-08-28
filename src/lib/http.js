@@ -1,13 +1,24 @@
 // src/lib/http.js
 import { toValidDate } from '@/utils/date';
 
-// Use a relative prefix; map it to your backend via Vite dev proxy / prod reverse proxy.
-export const API_PREFIX = (import.meta.env.VITE_API_PREFIX || '/api').replace(/\/+$/, '');
-// Back-compat if other code references API_BASE:
-export const API_BASE = API_PREFIX;
+// ---- API base resolution: runtime (either key) > env VITE_API_BASE > VITE_API_PREFIX > '/api'
+const runtimeBase =
+  (typeof window !== 'undefined' && (
+    // accept both keys for backwards-compat
+    window.__API_BASE ||
+    window.__APP_API_BASE ||
+    (typeof document !== 'undefined' &&
+      document.querySelector?.('meta[name="x-api-base"]')?.content)
+  )) || '';
+
+const envBase   = (import.meta?.env?.VITE_API_BASE   || '').trim();
+const envPrefix = (import.meta?.env?.VITE_API_PREFIX || '').trim();
+
+export const API_PREFIX = (runtimeBase || envBase || envPrefix || '/api').replace(/\/+$/, '');
+export const API_BASE = API_PREFIX; // back-compat
 
 function ensureLeadingSlash(p) {
-  return p.startsWith('/') ? p : `/${p}`;
+  return p && p.startsWith('/') ? p : `/${p || ''}`;
 }
 
 async function parseJSON(res) {
@@ -16,7 +27,6 @@ async function parseJSON(res) {
     const data = await res.json();
     return sanitizeDates(data);
   }
-  // Fallback for non-JSON responses
   return res.text();
 }
 
@@ -53,3 +63,4 @@ export function sanitizeDates(obj) {
   }
   return obj;
 }
+
