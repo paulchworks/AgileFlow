@@ -70,7 +70,7 @@ export default function SprintBoard() {
   // Auto-select sprint when project is selected
   useEffect(() => {
     if (selectedProject && sprints.length > 0) {
-      const projectSprints = sprints.filter(s => s.project_id === selectedProjectSvc.id);
+      const projectSprints = sprints.filter(s => s.project_id === selectedProject.id);
       if (projectSprints.length > 0 && !selectedSprint) {
         // Try to find active sprint first, otherwise take the first one
         const activeSprint = projectSprints.find(s => s.status === 'active');
@@ -186,7 +186,7 @@ export default function SprintBoard() {
             </div>
           ) : (
             <div className="max-w-md mx-auto">
-              <h3 className="text-xl font-semibold mb-4">Project: {selectedProjectSvc.name}</h3>
+              <h3 className="text-xl font-semibold mb-4">Project: {selectedProject.name}</h3>
               <p className="text-slate-600 mb-8">No sprints available for this project</p>
               <Button onClick={() => setSelectedProject(null)} variant="outline">
                 Choose Different Project
@@ -199,7 +199,7 @@ export default function SprintBoard() {
   }
 
   const projectSprints = selectedProject 
-    ? sprints.filter(s => s.project_id === selectedProjectSvc.id)
+    ? sprints.filter(s => s.project_id === selectedProject.id)
     : [];
 
   return (
@@ -208,7 +208,7 @@ export default function SprintBoard() {
         project={selectedProject}
         sprint={selectedSprint}
         projects={projects}
-        sprints={sprints.filter(s => s.project_id === selectedProjectSvc.id)}
+        sprints={sprints.filter(s => s.project_id === selectedProject.id)}
         onProjectChange={setSelectedProject}
         onSprintChange={setSelectedSprint}
         onAddStory={() => setShowStoryModal(true)}

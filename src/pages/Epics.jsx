@@ -1,6 +1,6 @@
 import { formatDistanceToNow, formatDistance, format } from '@/lib/dates';
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Project, Epic, Story } from "@/api/entities";
 const ProjectSvc = (typeof window !== 'undefined' && window.__AgileFlowProjectAPI) || Project;
 
@@ -34,11 +34,10 @@ export default function Epics() {
         Epic.list(),
         Story.list(),
       ]);
-      setProjects(projectsData);
-      setEpics(epicsData);
-      setStories(storiesData);
-      
-      // Don't auto-select a project - default to "All Epics" view
+      setProjects(projectsData || []);
+      setEpics(epicsData || []);
+      setStories(storiesData || []);
+      // Don’t auto-select a project — default to "All Epics"
     } catch (error) {
       console.error("Error loading epics data:", error);
     }
@@ -50,8 +49,11 @@ export default function Epics() {
       if (editingEpic) {
         await Epic.update(editingEpic.id, epicData);
       } else {
-        // When creating a new epic, ensure we have a project_id
-        await Epic.create({ ...epicData, project_id: selectedProject?.id });
+        if (!selectedProject?.id) {
+          console.warn('Create Epic: no project selected');
+          return;
+        }
+        await Epic.create({ ...epicData, project_id: selectedProject.id });
       }
       setShowForm(false);
       setEditingEpic(null);
@@ -73,12 +75,11 @@ export default function Epics() {
 
   const handleStorySubmit = async (storyData) => {
     try {
-      // Story created from epic should go to backlog with epic association
       const dataToSave = {
         ...storyData,
         project_id: selectedEpicForStory.project_id,
         epic_id: selectedEpicForStory.id,
-        status: 'backlog' // Stories created from epics start in backlog
+        status: 'backlog'
       };
 
       await Story.create(dataToSave);
@@ -90,14 +91,18 @@ export default function Epics() {
     }
   };
 
-  // Filter epics based on selected project
-  const filteredEpics = selectedProject
-    ? epics.filter((epic) => epic.project_id === selectedProjectSvc.id)
-    : epics; // Show all epics if no specific project is selected
+  // ---- FIX: use selectedProject (not selectedProjectSvc) and be type-safe
+  const normalizeId = (v) => (v == null ? null : String(v));
+  const selectedId = normalizeId(selectedProject?.id);
+
+  const filteredEpics = useMemo(() => {
+    if (!selectedId) return epics;
+    return epics.filter((epic) => normalizeId(epic.project_id) === selectedId);
+  }, [epics, selectedId]);
 
   // Get project name for epic display when showing all epics
   const getProjectName = (projectId) => {
-    const project = projects.find(p => p.id === projectId);
+    const project = projects.find(p => normalizeId(p.id) === normalizeId(projectId));
     return project?.name || 'Unknown Project';
   };
 
@@ -147,7 +152,7 @@ export default function Epics() {
           <div className="text-center py-16">
             <h3 className="text-xl font-semibold text-slate-800">
               {selectedProject 
-                ? `No epics found for "${selectedProjectSvc.name}"`
+                ? `No epics found for "${selectedProject.name}"`
                 : "No epics found across all projects"
               }
             </h3>
@@ -169,12 +174,11 @@ export default function Epics() {
           </div>
         )}
 
-        {/* Add StoryModal for creating stories from epics */}
         <AnimatePresence>
           {showStoryModal && (
             <StoryModal
               story={null}
-              selectedProject={projects.find(p => p.id === selectedEpicForStory?.project_id)}
+              selectedProject={projects.find(p => normalizeId(p.id) === normalizeId(selectedEpicForStory?.project_id))}
               preSelectedEpic={selectedEpicForStory}
               onSubmit={handleStorySubmit}
               onClose={() => {
@@ -188,3 +192,4 @@ export default function Epics() {
     </div>
   );
 }
+

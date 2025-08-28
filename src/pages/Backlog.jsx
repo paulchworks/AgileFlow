@@ -100,7 +100,7 @@ export default function Backlog() {
   const filteredStories = stories.filter(story => {
     // Project filter: if a specific project is selected, filter by its ID.
     // If selectedProject is null (All Projects view), this filter is skipped.
-    if (selectedProject && story.project_id !== selectedProjectSvc.id) return false;
+    if (selectedProject && story.project_id !== selectedProject.id) return false;
     
     // Backlog filter (only stories not in a sprint)
     if (story.sprint_id) return false;
@@ -116,7 +116,7 @@ export default function Backlog() {
   });
 
   const projectSprints = selectedProject 
-    ? sprints.filter(s => s.project_id === selectedProjectSvc.id)
+    ? sprints.filter(s => s.project_id === selectedProject.id)
     : [];
 
   if (isLoading) {
@@ -199,7 +199,7 @@ export default function Backlog() {
                     <div className="bg-white rounded-xl shadow-lg p-8">
                       <h3 className="text-xl font-semibold text-slate-800 mb-4">
                         {selectedProject 
-                          ? `No stories in the backlog for "${selectedProjectSvc.name}"`
+                          ? `No stories in the backlog for "${selectedProject.name}"`
                           : "No stories found in the backlog across all projects"
                         }
                       </h3>
