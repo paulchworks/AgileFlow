@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toValidDate, formatDateTime } from '@/utils/date';
 
 // pick the best timestamp a row has
-const pickIssueTimestamp = (issue) =>
+const pickIssueTs = (issue) =>
   issue?.updated_date ??
   issue?.updatedAt ??
   issue?.updated_at ??
