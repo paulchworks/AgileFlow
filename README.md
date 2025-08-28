@@ -1,8 +1,7 @@
-# Base44 App
+# Agileflow
 
+<img width="1897" height="882" alt="image" src="https://github.com/user-attachments/assets/8ade3099-f04e-4268-9044-d1c16ffe001c" />
 
-This app was created automatically by Base44.
-It's a Vite+React app that communicates with the Base44 API.
 
 ## Running the app
 
