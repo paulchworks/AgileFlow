@@ -10,7 +10,7 @@ Parameters:
     Type: String
     Default: "*"
   ApiAllowedOrigin:
-    Description: Same as AllowedOrigin (used in CSP connect-src)
+    Description: Origin used in CSP connect-src (must be the API ORIGIN, no path)
     Type: String
     Default: "https://example.execute-api.ap-southeast-1.amazonaws.com" # placeholder
 
@@ -19,7 +19,9 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "${AppName}-site-${AWS::AccountId}"
-      OwnershipControls: { Rules: [{ ObjectOwnership: BucketOwnerPreferred }] }
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerPreferred
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -36,7 +38,7 @@ Resources:
         SigningProtocol: sigv4
         Description: OAC for S3 origin
 
-  # Response headers policy with CSP; connect-src locked to API later
+  # Response headers policy with CSP; connect-src locked to API origin
   RespHeadersPolicy:
     Type: AWS::CloudFront::ResponseHeadersPolicy
     Properties:
@@ -60,7 +62,7 @@ Resources:
         SecurityHeadersConfig:
           ContentSecurityPolicy:
             Override: true
-            # keep this on ONE line to avoid YAML parsing quirks
+            # keep on one line
             ContentSecurityPolicy: !Sub "default-src 'self'; connect-src 'self' ${ApiAllowedOrigin}; img-src 'self' data:; font-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline';"
           FrameOptions:
             FrameOption: SAMEORIGIN
@@ -89,7 +91,7 @@ Resources:
           ViewerProtocolPolicy: redirect-to-https
           AllowedMethods: [GET, HEAD, OPTIONS]
           CachedMethods: [GET, HEAD, OPTIONS]
-          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6  # AWS Managed: CachingOptimized
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # AWS Managed: CachingOptimized
           ResponseHeadersPolicyId: !GetAtt RespHeadersPolicy.Id
         Origins:
           - Id: siteOrigin
@@ -142,7 +144,8 @@ Resources:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
-            Principal: { Service: lambda.amazonaws.com }
+            Principal:
+              Service: lambda.amazonaws.com
             Action: sts:AssumeRole
       Policies:
         - PolicyName: ddb-access
@@ -154,6 +157,7 @@ Resources:
                   - dynamodb:GetItem
                   - dynamodb:PutItem
                   - dynamodb:DeleteItem
+                  - dynamodb:Scan          # NEW: needed by GET /projects
                 Resource: !GetAtt BoardsTable.Arn
               - Effect: Allow
                 Action:
@@ -176,61 +180,129 @@ Resources:
           ALLOWED_ORIGIN: !Ref AllowedOrigin
       Code:
         ZipFile: |
-          const { DynamoDBClient, GetItemCommand, PutItemCommand, DeleteItemCommand } = require("@aws-sdk/client-dynamodb");
+          const {
+            DynamoDBClient,
+            GetItemCommand,
+            PutItemCommand,
+            DeleteItemCommand,
+            ScanCommand,
+          } = require("@aws-sdk/client-dynamodb");
+
           const ddb = new DynamoDBClient({});
           const TABLE = process.env.TABLE_NAME;
-          const ok = (body, status=200) => ({
+
+          const ok = (body, status = 200) => ({
             statusCode: status,
             headers: {
               "content-type": "application/json",
               "access-control-allow-origin": process.env.ALLOWED_ORIGIN,
               "access-control-allow-headers": "content-type",
-              "access-control-allow-methods": "GET,PUT,POST,DELETE,OPTIONS"
+              "access-control-allow-methods": "GET,PUT,POST,DELETE,OPTIONS",
             },
-            body: JSON.stringify(body)
+            body: JSON.stringify(body),
           });
+
           exports.handler = async (event) => {
-            if (event.requestContext.http.method === "OPTIONS") return ok({});
-            const { routeKey, pathParameters, body } = event;
+            if (event?.requestContext?.http?.method === "OPTIONS") return ok({});
+            const routeKey = event?.routeKey;
+            const pathParameters = event?.pathParameters || {};
+            const rawBody = event?.body || "{}";
+
             try {
               if (routeKey === "GET /boards/{id}") {
                 const id = pathParameters.id;
-                const r = await ddb.send(new GetItemCommand({ TableName: TABLE, Key: { PK:{S:`BOARD#${id}`}, SK:{S:"META#v1"} } }));
-                return r.Item ? ok({ id, data: JSON.parse(r.Item.data.S), updatedAt: r.Item.updatedAt.S }) : ok({ message:"Not found" }, 404);
+                const r = await ddb.send(
+                  new GetItemCommand({
+                    TableName: TABLE,
+                    Key: { PK: { S: `BOARD#${id}` }, SK: { S: "META#v1" } },
+                  })
+                );
+                if (!r.Item) return ok({ message: "Not found" }, 404);
+                let data = {};
+                try { data = JSON.parse(r.Item.data?.S || "{}"); } catch (_) {}
+                const updatedAt = r.Item.updatedAt?.S || null;
+                return ok({ id, data, updatedAt });
               }
+
               if (routeKey === "PUT /boards/{id}") {
                 const id = pathParameters.id;
-                const payload = JSON.parse(body || "{}");
-                await ddb.send(new PutItemCommand({
-                  TableName: TABLE,
-                  Item: {
-                    PK: { S: `BOARD#${id}` },
-                    SK: { S: "META#v1" },
-                    data: { S: JSON.stringify(payload.data||{}) },
-                    updatedAt: { S: new Date().toISOString() }
-                  }
-                }));
-                return ok({ updatedAt: new Date().toISOString() });
+                const payload = JSON.parse(rawBody);
+                const now = new Date().toISOString();
+                await ddb.send(
+                  new PutItemCommand({
+                    TableName: TABLE,
+                    Item: {
+                      PK: { S: `BOARD#${id}` },
+                      SK: { S: "META#v1" },
+                      data: { S: JSON.stringify(payload.data || {}) },
+                      updatedAt: { S: now },
+                    },
+                  })
+                );
+                return ok({ updatedAt: now });
               }
+
               if (routeKey === "POST /boards") {
-                const { id, data } = JSON.parse(body || "{}");
+                const { id, data } = JSON.parse(rawBody);
                 if (!id) return ok({ error: "id required" }, 400);
-                await ddb.send(new PutItemCommand({
-                  TableName: TABLE,
-                  Item: {
-                    PK: { S: `BOARD#${id}` },
-                    SK: { S: "META#v1" },
-                    data: { S: JSON.stringify(data||{}) },
-                    updatedAt: { S: new Date().toISOString() }
-                  }
-                }));
-                return ok({ id, created: true });
+                const now = new Date().toISOString();
+                await ddb.send(
+                  new PutItemCommand({
+                    TableName: TABLE,
+                    Item: {
+                      PK: { S: `BOARD#${id}` },
+                      SK: { S: "META#v1" },
+                      data: { S: JSON.stringify(data || {}) },
+                      updatedAt: { S: now },
+                    },
+                  })
+                );
+                return ok({ id, created: true, updatedAt: now });
               }
+
               if (routeKey === "DELETE /boards/{id}") {
                 const id = pathParameters.id;
-                await ddb.send(new DeleteItemCommand({ TableName: TABLE, Key: { PK:{S:`BOARD#${id}`}, SK:{S:"META#v1"} } }));
+                await ddb.send(
+                  new DeleteItemCommand({
+                    TableName: TABLE,
+                    Key: { PK: { S: `BOARD#${id}` }, SK: { S: "META#v1" } },
+                  })
+                );
                 return ok({ id, deleted: true });
               }
+
+              // NEW: list boards as "projects" for dashboard
+              if (routeKey === "GET /projects") {
+                const out = await ddb.send(
+                  new ScanCommand({
+                    TableName: TABLE,
+                    FilterExpression: "begins_with(#pk, :pk)",
+                    ExpressionAttributeNames: { "#pk": "PK", "#d": "data" },
+                    ExpressionAttributeValues: { ":pk": { S: "BOARD#" } },
+                    ProjectionExpression: "#pk, #d",
+                  })
+                );
+
+                const items = (out.Items || []).map((it) => {
+                  const id = (it.PK?.S || "").replace(/^BOARD#/, "");
+                  let board = {};
+                  try { board = JSON.parse(it.data?.S || "{}"); } catch (_) {}
+                  const meta = board?.meta || {};
+                  return {
+                    id,
+                    name: meta.name || "",
+                    description: meta.description || "",
+                    status: meta.status || "planning",
+                    start_date: meta.start_date || null,
+                    end_date: meta.end_date || null,
+                    color: meta.color || "#1e40af",
+                    team_lead: meta.team_lead || null,
+                  };
+                });
+
+                return ok({ items });
+              }
+
               return ok({ error: "Not found" }, 404);
             } catch (e) {
               console.error(e);
@@ -244,7 +316,7 @@ Resources:
       Name: !Sub "${AppName}-http"
       ProtocolType: HTTP
       CorsConfiguration:
-        AllowOrigins: [ !Ref AllowedOrigin ]
+        AllowOrigins: [ !Ref AllowedOrigin ]    # origin ONLY (no /prod)
         AllowMethods: [ GET, POST, PUT, DELETE, OPTIONS ]
         AllowHeaders: [ content-type ]
 
@@ -258,16 +330,39 @@ Resources:
 
   RouteGet:
     Type: AWS::ApiGatewayV2::Route
-    Properties: { ApiId: !Ref HttpApi, RouteKey: "GET /boards/{id}", Target: !Sub "integrations/${ApiIntegration}" }
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "GET /boards/{id}"
+      Target: !Sub "integrations/${ApiIntegration}"
+
   RoutePut:
     Type: AWS::ApiGatewayV2::Route
-    Properties: { ApiId: !Ref HttpApi, RouteKey: "PUT /boards/{id}", Target: !Sub "integrations/${ApiIntegration}" }
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "PUT /boards/{id}"
+      Target: !Sub "integrations/${ApiIntegration}"
+
   RoutePost:
     Type: AWS::ApiGatewayV2::Route
-    Properties: { ApiId: !Ref HttpApi, RouteKey: "POST /boards", Target: !Sub "integrations/${ApiIntegration}" }
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "POST /boards"
+      Target: !Sub "integrations/${ApiIntegration}"
+
   RouteDelete:
     Type: AWS::ApiGatewayV2::Route
-    Properties: { ApiId: !Ref HttpApi, RouteKey: "DELETE /boards/{id}", Target: !Sub "integrations/${ApiIntegration}" }
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "DELETE /boards/{id}"
+      Target: !Sub "integrations/${ApiIntegration}"
+
+  # NEW route for dashboard listing
+  RouteGetProjects:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "GET /projects"
+      Target: !Sub "integrations/${ApiIntegration}"
 
   ApiPermInvoke:
     Type: AWS::Lambda::Permission
@@ -291,3 +386,4 @@ Outputs:
     Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
   SiteBucketName:
     Value: !Ref SiteBucket
+
