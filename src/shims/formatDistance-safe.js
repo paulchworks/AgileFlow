@@ -1,10 +1,14 @@
-// src/shims/formatDistance-safe.js
+// Safe wrapper for date-fns/formatDistance
+import realFormatDistance from 'date-fns/formatDistance';
 import { toValidDate } from '@/utils/date';
-import { formatDistance as realFormatDistance } from 'date-fns-real';
 
-export default function formatDistance(date, baseDate, options) {
+export default function formatDistance(date, baseDate = new Date(), options = {}) {
   const d = toValidDate(date);
-  const b = toValidDate(baseDate ?? new Date());
-  if (!d || !b) return options?.fallback ?? '—';
-  return realFormatDistance(d, b, options);
+  const b = toValidDate(baseDate) || new Date();
+  if (!d) return options?.fallback ?? '—';
+  try {
+    return realFormatDistance(d, b, options);
+  } catch {
+    return options?.fallback ?? '—';
+  }
 }

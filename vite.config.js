@@ -23,6 +23,8 @@ export default defineConfig(({ mode }) => {
         { find: '/src/api/entities', replacement: path.resolve(__dirname, './src/api/entities.js') },
         { find: 'api/entities',      replacement: path.resolve(__dirname, './src/api/entities.js') },
         { find: 'api',               replacement: path.resolve(__dirname, './src/api/index.js') },
+        { find: 'date-fns/formatDistanceToNow', replacement: path.resolve(__dirname, './src/shims/formatDistanceToNow-safe.js') },
+        { find: 'date-fns/formatDistance',      replacement: path.resolve(__dirname, './src/shims/formatDistance-safe.js') },
       ],
     },
 
