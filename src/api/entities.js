@@ -1,41 +1,52 @@
 // src/api/entities.js
 import { BoardsAPI } from '../lib/apiClient';
 
-// ---------- helpers ----------
+// ---------- generic date helpers ----------
 const toISOorNull = (v) => {
-  if (!v) return null; // "", null, undefined -> null
-  const d = new Date(v);
+  if (v === null || v === undefined || v === '') return null;
+  const d = v instanceof Date ? v : new Date(v);
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 };
 
-const fillProjectDefaults = (it = {}) => {
-  const start_date = toISOorNull(it.start_date ?? it.startDate);
-  const end_date   = toISOorNull(it.end_date   ?? it.endDate);
-  const created_at = toISOorNull(it.created_at ?? it.createdAt);
-  const updated_at = toISOorNull(it.updated_at ?? it.updatedAt);
+// Normalize ANY keys that smell like dates.
+// e.g. start, start_date, startDate, due, deadline, created_at, updatedAt, etc.
+const normalizeDatesInObject = (obj = {}) => {
+  const out = { ...obj };
+  for (const k of Object.keys(out)) {
+    if (/(^|_)(date|time)$|(_at$)|(^start$)|(^end$)|(^due$)|(^deadline$)|(^created$)|(^updated$)/i.test(k)) {
+      out[k] = toISOorNull(out[k]);
+    }
+  }
+  return out;
+};
 
-  const shaped = {
-    id: it.id ?? it.ID ?? it.pk ?? '',
-    name: it.name ?? '',
-    description: it.description ?? '',
-    status: it.status ?? 'planning',
-    color: it.color ?? '#1e40af',
-    team_lead: it.team_lead ?? it.teamLead ?? null,
+// Fill required fields + create snake<->camel mirrors for common date keys.
+const shapeProject = (it = {}) => {
+  const src = normalizeDatesInObject(it);
 
-    // snake_case (what we store)
-    start_date,
-    end_date,
-    created_at,
-    updated_at,
+  // compute canonical fields
+  const start_date = toISOorNull(src.start_date ?? src.startDate ?? src.start);
+  const end_date   = toISOorNull(src.end_date   ?? src.endDate   ?? src.end);
+  const created_at = toISOorNull(src.created_at ?? src.createdAt ?? src.created);
+  const updated_at = toISOorNull(src.updated_at ?? src.updatedAt ?? src.updated);
 
-    // camelCase mirrors (what some UI code expects)
-    startDate: start_date,
-    endDate:   end_date,
-    createdAt: created_at,
-    updatedAt: updated_at,
+  return {
+    // keep any extra fields (already normalized where relevant)
+    ...src,
+
+    // required/base fields
+    id: src.id ?? '',
+    name: src.name ?? '',
+    description: src.description ?? '',
+    status: src.status ?? 'planning',
+    color: src.color ?? '#1e40af',
+    team_lead: src.team_lead ?? src.teamLead ?? null,
+
+    // snake_case
+    start_date, end_date, created_at, updated_at,
+    // camelCase mirrors
+    startDate: start_date, endDate: end_date, createdAt: created_at, updatedAt: updated_at,
   };
-
-  return shaped;
 };
 
 const apiBase = () =>
@@ -43,16 +54,16 @@ const apiBase = () =>
 
 // ---------- board <-> project shaping ----------
 const projectToBoard = (p) => ({
-  meta: {
-    name: p?.name ?? '',
-    description: p?.description ?? '',
-    status: p?.status ?? 'planning',
-    start_date: toISOorNull(p?.start_date ?? p?.startDate),
-    end_date:   toISOorNull(p?.end_date   ?? p?.endDate),
-    color: p?.color ?? '#1e40af',
-    team_lead: p?.team_lead ?? p?.teamLead ?? null,
+  meta: shapeProject({
+    name: p?.name,
+    description: p?.description,
+    status: p?.status,
+    start_date: p?.start_date ?? p?.startDate,
+    end_date:   p?.end_date   ?? p?.endDate,
+    color: p?.color,
+    team_lead: p?.team_lead ?? p?.teamLead,
     created_at: new Date().toISOString(),
-  },
+  }),
   columns: [
     { id: 'todo',  name: 'To do',       cardIds: [] },
     { id: 'doing', name: 'In progress', cardIds: [] },
@@ -61,10 +72,7 @@ const projectToBoard = (p) => ({
   cards: [],
 });
 
-const boardToProject = (board, id) => {
-  const meta = board?.meta ?? {};
-  return fillProjectDefaults({ id, ...meta });
-};
+const boardToProject = (board, id) => shapeProject({ id, ...(board?.meta ?? {}) });
 
 const genId = () =>
   (crypto?.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2, 10));
@@ -72,20 +80,13 @@ const genId = () =>
 // ---------- canonical Project service ----------
 const RawProject = {
   async list() {
-    const base = apiBase();
-    const res = await fetch(`${base}/projects`, { method: 'GET' });
+    const res = await fetch(`${apiBase()}/projects`, { method: 'GET' });
     if (!res.ok) throw new Error(`list failed: ${res.status}`);
     const json = await res.json();
 
-    // Coerce: accept array, object-with-items, or anything else
-    let items = Array.isArray(json) ? json
-              : Array.isArray(json?.items) ? json.items
-              : [];
-
-    // Normalize each item
-    items = items.map(fillProjectDefaults);
-
-    return items;
+    // accept array or {items:[]}
+    const raw = Array.isArray(json) ? json : Array.isArray(json?.items) ? json.items : [];
+    return raw.map(shapeProject);
   },
 
   async create(projectData) {
@@ -98,7 +99,8 @@ const RawProject = {
   async get(id) {
     const r = await BoardsAPI.get(id);
     if (!r?.data) return null;
-    return boardToProject(r.data, id);
+    // also normalize dates coming back from a single board
+    return boardToProject(normalizeDatesInObject(r.data), id);
   },
 
   async update(id, patch) {
@@ -113,10 +115,11 @@ const RawProject = {
       },
     };
 
-    // sanitize dates and keep both casings in storage’s meta
-    merged.meta.start_date = toISOorNull(merged.meta.start_date ?? merged.meta.startDate);
-    merged.meta.end_date   = toISOorNull(merged.meta.end_date   ?? merged.meta.endDate);
-    merged.meta.updated_at = new Date().toISOString();
+    // normalize ANY date-ish keys and set updated_at
+    merged.meta = {
+      ...normalizeDatesInObject(merged.meta),
+      updated_at: new Date().toISOString(),
+    };
 
     const saved = await BoardsAPI.save(id, merged, cur.updatedAt);
     return { id, ...boardToProject(merged, id), updatedAt: saved?.updatedAt };
@@ -128,7 +131,7 @@ const RawProject = {
   },
 };
 
-// Guard: always expose callable list/create even if something weird happens
+// Guard: keep list/create callable even if something odd happens
 const Project = new Proxy(RawProject, {
   get(target, prop, receiver) {
     if (prop === 'list'   && typeof target.list   !== 'function') return async () => [];
@@ -137,19 +140,13 @@ const Project = new Proxy(RawProject, {
   }
 });
 
-// ---------- safe stubs for ALL other entities ----------
-// Delegate listing to Project.list() so shape & dates are identical.
-const stub = (name) => new Proxy({
+// ---------- stubs for other entities (delegate to Project.list) ----------
+const stub = (name) => ({
   async list()   { return Project.list(); },
   async get()    { return null; },
   async create() { throw new Error(`${name}.create not implemented`); },
   async update() { throw new Error(`${name}.update not implemented`); },
   async delete() { throw new Error(`${name}.delete not implemented`); },
-}, {
-  get(target, prop, receiver) {
-    if (prop === 'list' && typeof target.list !== 'function') return async () => [];
-    return Reflect.get(target, prop, receiver);
-  }
 });
 
 export const Sprint = stub('Sprint');
@@ -162,7 +159,7 @@ export const User   = stub('User');
 export { Project };
 export default Project;
 
-// Optional: quick runtime probe for DevTools
+// Debug probe
 if (typeof window !== 'undefined') {
   window.__AgileFlowEntities = { Project, Sprint, Story, Epic, Issue, Task, User };
 }
