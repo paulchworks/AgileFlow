@@ -7,6 +7,7 @@
 
 ```bash
 npm install
+npm install @hello-pangea/dnd
 npm run dev
 ```
 
