@@ -5,9 +5,21 @@
     <link rel="icon" type="image/svg+xml" href="/agileflow.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AgileFlow</title>
+
+    <!-- Set API base BEFORE any other modules load -->
+    <script type="module">
+      // Read from Vite env or ?api= override; trim trailing slashes
+      const envBase = import.meta.env?.VITE_API_BASE || "";
+      const urlBase = new URL(location.href).searchParams.get("api") || "";
+      const base = (urlBase || envBase).replace(/\/+$/, "");
+      window.__APP_API_BASE = base;
+      console.log("[AgileFlow] API_BASE =", window.__APP_API_BASE);
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <!-- App entry -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
+

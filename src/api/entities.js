@@ -49,8 +49,17 @@ const shapeProject = (it = {}) => {
   };
 };
 
-const apiBase = () =>
-  ((typeof window !== 'undefined' && window.__APP_API_BASE) || '').replace(/\/+$/, '');
+const apiBase = () => {
+  const fromWin =
+    typeof window !== "undefined" ? window.__APP_API_BASE : "";
+  const fromEnv =
+    typeof import.meta !== "undefined" && import.meta.env
+      ? import.meta.env.VITE_API_BASE
+      : "";
+  const base = (fromWin || fromEnv || "").replace(/\/+$/, "");
+  if (!base) console.warn("[AgileFlow] API base is not configured");
+  return base;
+};
 
 // ---------- board <-> project shaping ----------
 const projectToBoard = (p) => ({
@@ -80,14 +89,14 @@ const genId = () =>
 // ---------- canonical Project service ----------
 const RawProject = {
   async list() {
-    const res = await fetch(`${apiBase()}/projects`, { method: 'GET' });
+    const base = apiBase();
+    if (!base) return []; // avoid hitting CloudFront with a relative /projects
+    const res = await fetch(`${base}/projects`, { method: "GET" });
     if (!res.ok) throw new Error(`list failed: ${res.status}`);
     const json = await res.json();
-
-    // accept array or {items:[]}
     const raw = Array.isArray(json) ? json : Array.isArray(json?.items) ? json.items : [];
     return raw.map(shapeProject);
-  },
+},
 
   async create(projectData) {
     const id = projectData?.id || genId();
