@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { Project, Sprint, Story, Issue, User } from "@/api/entities";
+import Project, { Sprint, Story, Issue, User } from "@/api/entities";
+const ProjectSvc = (typeof window !== 'undefined' && window.__AgileFlowProjectAPI) || Project;
 import { Link, useParams } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { ArrowLeft, Loader2 } from "lucide-react";
@@ -41,7 +42,7 @@ export default function ProjectDetails() {
     setIsLoading(true);
     try {
       const [projectData, sprintsData, storiesData, issuesData, usersData] = await Promise.all([
-        Project.list(),
+        ProjectSvc.list(),
         Sprint.filter({ project_id: projectId }),
         Story.filter({ project_id: projectId }),
         Issue.filter({ project_id: projectId }),
@@ -62,7 +63,7 @@ export default function ProjectDetails() {
 
   const handleSprintSubmit = async (sprintData) => {
     try {
-      const dataToSave = { ...sprintData, project_id: project.id };
+      const dataToSave = { ...sprintData, project_id: ProjectSvc.id };
       if (editingSprint) {
         await Sprint.update(editingSprint.id, dataToSave);
       } else {
@@ -71,7 +72,7 @@ export default function ProjectDetails() {
       setShowSprintForm(false);
       setEditingSprint(null);
       // Reload data
-      loadData(project.id);
+      loadData(ProjectSvc.id);
     } catch (error) {
       console.error("Error saving sprint:", error);
     }
@@ -105,9 +106,9 @@ export default function ProjectDetails() {
     );
   }
 
-  const projectSprints = sprints.filter(s => s.project_id === project.id);
-  const projectStories = stories.filter(s => s.project_id === project.id);
-  const projectIssues = issues.filter(i => i.project_id === project.id);
+  const projectSprints = sprints.filter(s => s.project_id === ProjectSvc.id);
+  const projectStories = stories.filter(s => s.project_id === ProjectSvc.id);
+  const projectIssues = issues.filter(i => i.project_id === ProjectSvc.id);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">

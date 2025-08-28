@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Story, Sprint, Project, Issue } from "@/api/entities";
+import Project, { Story, Sprint, Issue } from "@/api/entities";
+const ProjectSvc = (typeof window !== 'undefined' && window.__AgileFlowProjectAPI) || Project;
 import { 
   LayoutDashboard, 
   Folder, 
@@ -87,7 +88,7 @@ export default function Layout({ children, currentPageName }) {
       setIsLoadingStats(true);
       try {
         const [allProjects, allStories, allIssues] = await Promise.all([
-          Project.list(),
+          ProjectSvc.list(),
           Story.list(),
           Issue.list()
         ]);
@@ -102,8 +103,8 @@ export default function Layout({ children, currentPageName }) {
         // Calculate projects behind schedule
         const currentDate = new Date();
         const behindScheduleCount = allProjects.filter(project => {
-          if (!project.end_date || project.status === 'completed') return false;
-          const endDate = new Date(project.end_date);
+          if (!ProjectSvc.end_date || ProjectSvc.status === 'completed') return false;
+          const endDate = new Date(ProjectSvc.end_date);
           return endDate < currentDate;
         }).length;
 

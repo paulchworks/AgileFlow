@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Issue, Project, Epic, Story, User } from "@/api/entities";
+import Project, { Issue, Epic, Story, User } from "@/api/entities";
+const ProjectSvc = (typeof window !== 'undefined' && window.__AgileFlowProjectAPI) || Project;
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -23,7 +24,7 @@ export default function IssuesPage() {
     try {
       const [issuesData, projectsData, usersData] = await Promise.all([
         Issue.list("-created_date"),
-        Project.list(),
+        ProjectSvc.list(),
         User.list()
       ]);
       setIssues(issuesData);

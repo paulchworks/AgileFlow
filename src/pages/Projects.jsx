@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { Project, Story } from "@/api/entities";
+import Project, { Story } from "@/api/entities";
+const ProjectSvc = (typeof window !== 'undefined' && window.__AgileFlowProjectAPI) || Project;
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { motion } from "framer-motion";
@@ -23,7 +24,7 @@ export default function Projects() {
     setIsLoading(true);
     try {
       const [projectsData, storiesData] = await Promise.all([
-        Project.list("-created_date"),
+        ProjectSvc.list("-created_date"),
         Story.list()
       ]);
       setProjects(projectsData);
@@ -37,9 +38,9 @@ export default function Projects() {
   const handleSubmit = async (projectData) => {
     try {
       if (editingProject) {
-        await Project.update(editingProject.id, projectData);
+        await ProjectSvc.update(editingProjectSvc.id, projectData);
       } else {
-        await Project.create(projectData);
+        await ProjectSvc.create(projectData);
       }
       setShowForm(false);
       setEditingProject(null);
@@ -102,9 +103,9 @@ export default function Projects() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {projects.map((project) => (
             <ProjectCard
-              key={project.id}
+              key={ProjectSvc.id}
               project={project}
-              stories={stories.filter(s => s.project_id === project.id)}
+              stories={stories.filter(s => s.project_id === ProjectSvc.id)}
               onEdit={handleEdit}
               isLoading={isLoading}
             />
@@ -114,7 +115,7 @@ export default function Projects() {
         {!isLoading && projects.length === 0 && (
           <div className="text-center py-16">
             <h3 className="text-xl font-semibold text-slate-800 mb-4">No Projects Yet</h3>
-            <p className="text-slate-600 mb-6">Get started by creating your first project.</p>
+            <p className="text-slate-600 mb-6">Get started by creating your first ProjectSvc.</p>
             <Button 
               onClick={() => setShowForm(true)}
               className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600"

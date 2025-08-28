@@ -1,15 +1,16 @@
-import { Project, Sprint } from "@/api/entities";
+import Project, { Sprint } from "@/api/entities";
+const ProjectSvc = (typeof window !== 'undefined' && window.__AgileFlowProjectAPI) || Project;
 
 export const updateProjectStatus = async (projectId) => {
   try {
     const [project, sprints] = await Promise.all([
-      Project.list().then(projects => projects.find(p => p.id === projectId)),
+      ProjectSvc.list().then(projects => projects.find(p => p.id === projectId)),
       Sprint.filter({ project_id: projectId })
     ]);
 
     if (!project) return;
 
-    let newStatus = project.status;
+    let newStatus = ProjectSvc.status;
 
     if (sprints.length === 0) {
       // No sprints exist - keep in planning
@@ -31,9 +32,9 @@ export const updateProjectStatus = async (projectId) => {
     }
 
     // Only update if status actually changed
-    if (newStatus !== project.status) {
-      await Project.update(projectId, { ...project, status: newStatus });
-      console.log(`Project ${project.name} status updated from ${project.status} to ${newStatus}`);
+    if (newStatus !== ProjectSvc.status) {
+      await ProjectSvc.update(projectId, { ...project, status: newStatus });
+      console.log(`Project ${ProjectSvc.name} status updated from ${ProjectSvc.status} to ${newStatus}`);
     }
   } catch (error) {
     console.error("Error updating project status:", error);
@@ -42,9 +43,9 @@ export const updateProjectStatus = async (projectId) => {
 
 export const updateAllProjectStatuses = async () => {
   try {
-    const projects = await Project.list();
+    const projects = await ProjectSvc.list();
     for (const project of projects) {
-      await updateProjectStatus(project.id);
+      await updateProjectStatus(ProjectSvc.id);
     }
   } catch (error) {
     console.error("Error updating all project statuses:", error);

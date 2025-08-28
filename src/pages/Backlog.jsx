@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Project, Story, Task, Sprint } from "@/api/entities";
+import Project, { Story, Task, Sprint } from "@/api/entities";
+const ProjectSvc = (typeof window !== 'undefined' && window.__AgileFlowProjectAPI) || Project;
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -26,7 +27,7 @@ export default function Backlog() {
     setIsLoading(true);
     try {
       const [projectsData, storiesData, tasksData, sprintsData] = await Promise.all([
-        Project.list(),
+        ProjectSvc.list(),
         Story.list("-created_date"),
         Task.list(),
         Sprint.list()
@@ -98,7 +99,7 @@ export default function Backlog() {
   const filteredStories = stories.filter(story => {
     // Project filter: if a specific project is selected, filter by its ID.
     // If selectedProject is null (All Projects view), this filter is skipped.
-    if (selectedProject && story.project_id !== selectedProject.id) return false;
+    if (selectedProject && story.project_id !== selectedProjectSvc.id) return false;
     
     // Backlog filter (only stories not in a sprint)
     if (story.sprint_id) return false;
@@ -114,7 +115,7 @@ export default function Backlog() {
   });
 
   const projectSprints = selectedProject 
-    ? sprints.filter(s => s.project_id === selectedProject.id)
+    ? sprints.filter(s => s.project_id === selectedProjectSvc.id)
     : [];
 
   if (isLoading) {
@@ -197,13 +198,13 @@ export default function Backlog() {
                     <div className="bg-white rounded-xl shadow-lg p-8">
                       <h3 className="text-xl font-semibold text-slate-800 mb-4">
                         {selectedProject 
-                          ? `No stories in the backlog for "${selectedProject.name}"`
+                          ? `No stories in the backlog for "${selectedProjectSvc.name}"`
                           : "No stories found in the backlog across all projects"
                         }
                       </h3>
                       {selectedProject ? (
                         <>
-                          <p className="text-slate-600 mb-6">Start by creating your first user story for this project.</p>
+                          <p className="text-slate-600 mb-6">Start by creating your first user story for this ProjectSvc.</p>
                           <Button 
                             onClick={() => setShowStoryModal(true)}
                             className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600"

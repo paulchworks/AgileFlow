@@ -1,6 +1,8 @@
 
 import React, { useState, useEffect } from "react";
 import { Project, Epic, Story } from "@/api/entities";
+const ProjectSvc = (typeof window !== 'undefined' && window.__AgileFlowProjectAPI) || Project;
+
 import { motion, AnimatePresence } from "framer-motion";
 
 import EpicHeader from "../components/epics/EpicHeader";
@@ -27,7 +29,7 @@ export default function Epics() {
     setIsLoading(true);
     try {
       const [projectsData, epicsData, storiesData] = await Promise.all([
-        Project.list(),
+        ProjectSvc.list(),
         Epic.list(),
         Story.list(),
       ]);
@@ -89,7 +91,7 @@ export default function Epics() {
 
   // Filter epics based on selected project
   const filteredEpics = selectedProject
-    ? epics.filter((epic) => epic.project_id === selectedProject.id)
+    ? epics.filter((epic) => epic.project_id === selectedProjectSvc.id)
     : epics; // Show all epics if no specific project is selected
 
   // Get project name for epic display when showing all epics
@@ -144,7 +146,7 @@ export default function Epics() {
           <div className="text-center py-16">
             <h3 className="text-xl font-semibold text-slate-800">
               {selectedProject 
-                ? `No epics found for "${selectedProject.name}"`
+                ? `No epics found for "${selectedProjectSvc.name}"`
                 : "No epics found across all projects"
               }
             </h3>

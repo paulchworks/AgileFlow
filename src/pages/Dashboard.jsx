@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from "react";
-import { Project, Sprint, Story } from "@/api/entities";
+import Project, { Sprint, Story } from "@/api/entities";
+const ProjectSvc = (typeof window !== 'undefined' && window.__AgileFlowProjectAPI) || Project;
 import { updateAllProjectStatuses } from "@/components/utils/projectStatusUpdater";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,7 +40,7 @@ export default function Dashboard() {
       await updateAllProjectStatuses();
       
       const [projectsData, sprintsData, storiesData] = await Promise.all([
-        Project.list("-created_date"),
+        ProjectSvc.list("-created_date"),
         Sprint.list("-created_date"),
         Story.list("-updated_date", 20)
       ]);

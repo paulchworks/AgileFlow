@@ -1,3 +1,4 @@
+// src/api/entities.js
 import { BoardsAPI } from '../lib/apiClient';
 
 const projectToBoard = (p) => ({
@@ -22,9 +23,9 @@ const projectToBoard = (p) => ({
 const boardToProject = (board, id) => ({ id, ...(board?.meta ?? {}) });
 const genId = () => (crypto?.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2, 10));
 
-export const Project = {
-  async list() {             // <— REQUIRED by dashboard/quick stats
-    return [];               // stub until you add GET /projects
+const RawProject = {
+  async list() {                 // safe stub until you add GET /projects
+    return [];
   },
   async create(projectData) {
     const id = projectData?.id || genId();
@@ -50,8 +51,23 @@ export const Project = {
   },
 };
 
-export default Project; // default export is the service (has .list/.create)
+// Proxy: guarantees .list and .create are callable even if something weird imports an old shape
+const Project = new Proxy(RawProject, {
+  get(target, prop, receiver) {
+    if (prop === 'list' && typeof target.list !== 'function') {
+      return async () => []; // never crash dashboards
+    }
+    if (prop === 'create' && typeof target.create !== 'function') {
+      return async () => { throw new Error('Project.create not available'); };
+    }
+    return Reflect.get(target, prop, receiver);
+  }
+});
 
+export { Project };          // named export (some files use named)
+export default Project;      // default export (others use default)
+
+// Optional shims:
 export const Board = {
   get: (id) => BoardsAPI.get(id),
   create: (id, d) => BoardsAPI.create(id, d),
@@ -65,4 +81,5 @@ export const Issue  = {};
 export const Task   = {};
 export const User   = {};
 
-if (typeof window !== 'undefined') window.__AgileFlowProjectAPI = Project; // runtime probe
+// Debug hook so we can verify in DevTools
+if (typeof window !== 'undefined') window.__AgileFlowProjectAPI = Project;

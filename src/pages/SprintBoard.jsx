@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from "react";
-import { Project, Sprint, Story, Task } from "@/api/entities";
+import Project, { Sprint, Story, Task } from "@/api/entities";
+const ProjectSvc = (typeof window !== 'undefined' && window.__AgileFlowProjectAPI) || Project;
 import { Button } from "@/components/ui/button";
 import { Plus, Filter, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -68,7 +69,7 @@ export default function SprintBoard() {
   // Auto-select sprint when project is selected
   useEffect(() => {
     if (selectedProject && sprints.length > 0) {
-      const projectSprints = sprints.filter(s => s.project_id === selectedProject.id);
+      const projectSprints = sprints.filter(s => s.project_id === selectedProjectSvc.id);
       if (projectSprints.length > 0 && !selectedSprint) {
         // Try to find active sprint first, otherwise take the first one
         const activeSprint = projectSprints.find(s => s.status === 'active');
@@ -81,7 +82,7 @@ export default function SprintBoard() {
     setIsLoading(true);
     try {
       const [projectsData, sprintsData, storiesData, tasksData] = await Promise.all([
-        Project.list(),
+        ProjectSvc.list(),
         Sprint.list(),
         Story.list(),
         Task.list()
@@ -175,16 +176,16 @@ export default function SprintBoard() {
           {!selectedProject ? (
             <div className="grid gap-4 max-w-md mx-auto">
               {projects.map(project => (
-                <div key={project.id} className="p-4 border rounded-lg hover:bg-slate-50 cursor-pointer transition-colors"
+                <div key={ProjectSvc.id} className="p-4 border rounded-lg hover:bg-slate-50 cursor-pointer transition-colors"
                      onClick={() => handleProjectSelect(project)}>
-                  <h3 className="font-semibold">{project.name}</h3>
-                  <p className="text-sm text-slate-600">{sprints.filter(s => s.project_id === project.id).length} sprints</p>
+                  <h3 className="font-semibold">{ProjectSvc.name}</h3>
+                  <p className="text-sm text-slate-600">{sprints.filter(s => s.project_id === ProjectSvc.id).length} sprints</p>
                 </div>
               ))}
             </div>
           ) : (
             <div className="max-w-md mx-auto">
-              <h3 className="text-xl font-semibold mb-4">Project: {selectedProject.name}</h3>
+              <h3 className="text-xl font-semibold mb-4">Project: {selectedProjectSvc.name}</h3>
               <p className="text-slate-600 mb-8">No sprints available for this project</p>
               <Button onClick={() => setSelectedProject(null)} variant="outline">
                 Choose Different Project
@@ -197,7 +198,7 @@ export default function SprintBoard() {
   }
 
   const projectSprints = selectedProject 
-    ? sprints.filter(s => s.project_id === selectedProject.id)
+    ? sprints.filter(s => s.project_id === selectedProjectSvc.id)
     : [];
 
   return (
@@ -206,7 +207,7 @@ export default function SprintBoard() {
         project={selectedProject}
         sprint={selectedSprint}
         projects={projects}
-        sprints={sprints.filter(s => s.project_id === selectedProject.id)}
+        sprints={sprints.filter(s => s.project_id === selectedProjectSvc.id)}
         onProjectChange={setSelectedProject}
         onSprintChange={setSelectedSprint}
         onAddStory={() => setShowStoryModal(true)}
