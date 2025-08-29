@@ -105,9 +105,9 @@ export default function Projects() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {projects.map((project) => (
             <ProjectCard
-              key={Project.id}
+              key={project.id}
               project={project}
-              stories={stories.filter(s => s.project_id === Project.id)}
+              stories={stories.filter(s => s.project_id === project.id)}
               onEdit={handleEdit}
               isLoading={isLoading}
             />

@@ -104,8 +104,8 @@ export default function Layout({ children, currentPageName }) {
         // Calculate projects behind schedule
         const currentDate = new Date();
         const behindScheduleCount = allProjects.filter(project => {
-          if (!Project.end_date || Project.status === 'completed') return false;
-          const endDate = new Date(Project.end_date);
+          if (!project.end_date || project.status === 'completed') return false;
+          const endDate = new Date(project.end_date);
           return endDate < currentDate;
         }).length;
 
