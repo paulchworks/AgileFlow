@@ -177,10 +177,10 @@ export default function SprintBoard() {
           {!selectedProject ? (
             <div className="grid gap-4 max-w-md mx-auto">
               {projects.map(project => (
-                <div key={Project.id} className="p-4 border rounded-lg hover:bg-slate-50 cursor-pointer transition-colors"
+                <div key={project.id} className="p-4 border rounded-lg hover:bg-slate-50 cursor-pointer transition-colors"
                      onClick={() => handleProjectSelect(project)}>
-                  <h3 className="font-semibold">{Project.name}</h3>
-                  <p className="text-sm text-slate-600">{sprints.filter(s => s.project_id === Project.id).length} sprints</p>
+                  <h3 className="font-semibold">{project.name}</h3>
+                  <p className="text-sm text-slate-600">{sprints.filter(s => s.project_id === project.id).length} sprints</p>
                 </div>
               ))}
             </div>
