@@ -44,7 +44,7 @@ export default function ProjectDetails() {
     setIsLoading(true);
     try {
       const [projectData, sprintsData, storiesData, issuesData, usersData] = await Promise.all([
-        ProjectSvc.list(),
+        Project.list(),
         Sprint.filter({ project_id: projectId }),
         Story.filter({ project_id: projectId }),
         Issue.filter({ project_id: projectId }),
@@ -65,7 +65,7 @@ export default function ProjectDetails() {
 
   const handleSprintSubmit = async (sprintData) => {
     try {
-      const dataToSave = { ...sprintData, project_id: ProjectSvc.id };
+      const dataToSave = { ...sprintData, project_id: Project.id };
       if (editingSprint) {
         await Sprint.update(editingSprint.id, dataToSave);
       } else {
@@ -74,7 +74,7 @@ export default function ProjectDetails() {
       setShowSprintForm(false);
       setEditingSprint(null);
       // Reload data
-      loadData(ProjectSvc.id);
+      loadData(Project.id);
     } catch (error) {
       console.error("Error saving sprint:", error);
     }
@@ -108,9 +108,9 @@ export default function ProjectDetails() {
     );
   }
 
-  const projectSprints = sprints.filter(s => s.project_id === ProjectSvc.id);
-  const projectStories = stories.filter(s => s.project_id === ProjectSvc.id);
-  const projectIssues = issues.filter(i => i.project_id === ProjectSvc.id);
+  const projectSprints = sprints.filter(s => s.project_id === Project.id);
+  const projectStories = stories.filter(s => s.project_id === Project.id);
+  const projectIssues = issues.filter(i => i.project_id === Project.id);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">

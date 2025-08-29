@@ -26,7 +26,7 @@ export default function IssuesPage() {
     try {
       const [issuesData, projectsData, usersData] = await Promise.all([
         Issue.list("-created_date"),
-        ProjectSvc.list(),
+        Project.list(),
         User.list()
       ]);
       setIssues(issuesData);

@@ -89,7 +89,7 @@ export default function Layout({ children, currentPageName }) {
       setIsLoadingStats(true);
       try {
         const [allProjects, allStories, allIssues] = await Promise.all([
-          ProjectSvc.list(),
+          Project.list(),
           Story.list(),
           Issue.list()
         ]);
@@ -104,8 +104,8 @@ export default function Layout({ children, currentPageName }) {
         // Calculate projects behind schedule
         const currentDate = new Date();
         const behindScheduleCount = allProjects.filter(project => {
-          if (!ProjectSvc.end_date || ProjectSvc.status === 'completed') return false;
-          const endDate = new Date(ProjectSvc.end_date);
+          if (!Project.end_date || Project.status === 'completed') return false;
+          const endDate = new Date(Project.end_date);
           return endDate < currentDate;
         }).length;
 

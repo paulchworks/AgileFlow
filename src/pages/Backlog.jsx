@@ -28,7 +28,7 @@ export default function Backlog() {
     setIsLoading(true);
     try {
       const [projectsData, storiesData, tasksData, sprintsData] = await Promise.all([
-        ProjectSvc.list(),
+        Project.list(),
         Story.list("-created_date"),
         Task.list(),
         Sprint.list()
@@ -205,7 +205,7 @@ export default function Backlog() {
                       </h3>
                       {selectedProject ? (
                         <>
-                          <p className="text-slate-600 mb-6">Start by creating your first user story for this ProjectSvc.</p>
+                          <p className="text-slate-600 mb-6">Start by creating your first user story for this Project.</p>
                           <Button 
                             onClick={() => setShowStoryModal(true)}
                             className="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600"

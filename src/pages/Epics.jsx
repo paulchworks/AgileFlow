@@ -30,7 +30,7 @@ export default function Epics() {
     setIsLoading(true);
     try {
       const [projectsData, epicsData, storiesData] = await Promise.all([
-        ProjectSvc.list(),
+        Project.list(),
         Epic.list(),
         Story.list(),
       ]);
