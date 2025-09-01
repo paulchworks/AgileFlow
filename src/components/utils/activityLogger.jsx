@@ -1,4 +1,4 @@
-import { logActivity } from "@/functions/logActivity";
+import { logActivity } from "@/functions/logActivity.jsx";
 
 export const ActivityLogger = {
   async log(action, entityType, entityId, entityName, description, options = {}) {
