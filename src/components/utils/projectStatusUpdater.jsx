@@ -1,5 +1,7 @@
 // src/components/utils/projectStatusUpdater.jsx
 import Project from "@/api/entities";
+import { Sprint } from "@/api/entities";
+
 
 // helpers
 const arr = (v) => (Array.isArray(v) ? v : Array.isArray(v?.items) ? v.items : []);
