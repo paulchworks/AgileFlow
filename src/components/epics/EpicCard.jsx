@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { MoreVertical, Calendar, List, Building, Plus } from "lucide-react";
+import { MoreVertical, Calendar, List, Building, Plus, Info } from "lucide-react";
 import { format } from "date-fns";
 import {
   DropdownMenu,
