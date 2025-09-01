@@ -1,5 +1,5 @@
 // src/functions/logActivity.jsx
-// Client-side helper to POST an activity payload to your backend (no Base44).
+
 
 const API_BASE = (import.meta.env?.VITE_API_BASE || "/api").replace(/\/+$/, "");
 
