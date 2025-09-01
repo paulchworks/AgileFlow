@@ -1,4 +1,4 @@
-import { logActivity } from "@/functions/logActivity.jsx";
+import { logActivity } from "@/functions/logActivity"; // no extension is fine
 
 export const ActivityLogger = {
   async log(action, entityType, entityId, entityName, description, options = {}) {

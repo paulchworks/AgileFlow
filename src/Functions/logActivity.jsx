@@ -4,8 +4,7 @@
 const API_BASE = (import.meta.env?.VITE_API_BASE || "/api").replace(/\/+$/, "");
 
 function getAuthHeader() {
-  // Adjust if you store auth differently
-  const token = localStorage.getItem("token");
+  const token = localStorage.getItem("token"); // adjust if you store auth elsewhere
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
