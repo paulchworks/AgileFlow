@@ -13,6 +13,7 @@ import KanbanColumn from "../components/sprint/KanbanColumn";
 import StoryCard from "../components/sprint/StoryCard";
 import StoryModal from "../components/sprint/StoryModal";
 import SprintFilters from "../components/sprint/SprintFilters";
+import { ActivityLogger } from "../components/utils/activityLogger";
 
 const STORY_STATUSES = [
   { id: 'todo', title: 'To Do', color: 'bg-slate-100' },
@@ -105,40 +106,54 @@ export default function SprintBoard() {
       return;
     }
 
-    const storyId = draggableId;
+    const storyToMove = stories.find(s => s.id === draggableId);
+    if (!storyToMove) return;
+
     const newStatus = destination.droppableId;
     
     try {
-      await Story.update(storyId, { status: newStatus });
-      loadData(); // Refresh data
+      await Story.update(storyToMove.id, { status: newStatus });
+      await ActivityLogger.logStoryUpdated(storyToMove, { status: newStatus }); // Log status change
+      await loadData(); // Refresh data
     } catch (error) {
       console.error("Error updating story status:", error);
     }
   };
 
+  // Helper function to encapsulate story saving logic and return the saved story
+  const saveStoryWithMentions = async ({ storyId, data }) => {
+    let savedStory;
+    if (storyId) {
+      savedStory = await Story.update(storyId, data);
+    } else {
+      savedStory = await Story.create(data);
+    }
+    return { success: true, story: savedStory };
+  };
+
   const handleStorySubmit = async (storyData) => {
     try {
-      console.log("Received story data for save:", storyData); // Debug log
-      
       const dataToSave = {
         ...storyData,
         project_id: selectedProject?.id,
-        // sprint_id is now part of storyData, status is handled in modal
       };
 
-      console.log("Final data to save:", dataToSave); // Debug log
+      const response = await saveStoryWithMentions({
+        storyId: editingStory?.id,
+        data: dataToSave,
+      });
 
-      if (editingStory) {
-        console.log("Updating story with ID:", editingStory.id); // Debug log
-        await Story.update(editingStory.id, dataToSave);
-      } else {
-        console.log("Creating new story"); // Debug log
-        await Story.create(dataToSave);
+      if (response.success) { // Assuming saveStoryWithMentions returns { success: true, story: ... }
+        if (editingStory) {
+          await ActivityLogger.logStoryUpdated(editingStory, dataToSave);
+        } else {
+          await ActivityLogger.logStoryCreated(response.story);
+        }
       }
       
       setShowStoryModal(false);
       setEditingStory(null);
-      await loadData(); // Make sure we wait for data to reload
+      await loadData();
     } catch (error) {
       console.error("Error saving story:", error);
       // Don't close modal if there's an error

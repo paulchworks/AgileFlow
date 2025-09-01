@@ -29,41 +29,57 @@ export default function IssueFormModal({ issue, onSubmit, onClose, projects, use
   const [stories, setStories] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    loadProjectData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formData?.project_id]);
-
-  const loadProjectData = async () => {
+  const loadProjectData = useCallback(async () => {
+    if (!formData.project_id) return;
+    
     try {
-      const pid = formData?.project_id;
-      if (!pid) {
-        setEpics([]);
-        setStories([]);
-        return;
-      }
-
-      // fetch all, then filter locally
-      const [epicsRaw, storiesRaw] = await Promise.all([
-        Epic.list(),
-        Story.list(),
+      const [epicsData, storiesData] = await Promise.all([
+        Epic.filter({ project_id: formData.project_id }),
+        Story.filter({ project_id: formData.project_id })
       ]);
-
-      // normalize possible return shapes: array or { items: [] }
-      const toArray = (x) => Array.isArray(x) ? x : (x?.items ?? []);
-      const sameId = (a, b) => String(a ?? '') === String(b ?? '');
-
-      const epicsData = toArray(epicsRaw).filter(e => sameId(e.project_id, pid));
-      const storiesData = toArray(storiesRaw).filter(s => sameId(s.project_id, pid));
-
       setEpics(epicsData);
       setStories(storiesData);
     } catch (error) {
       console.error("Error loading project data:", error);
-      setEpics([]);
-      setStories([]);
     }
-  };
+  }, [formData.project_id]);
+
+  // Fix: Update form data whenever issue prop changes
+  useEffect(() => {
+    if (issue) {
+      console.log("IssueFormModal: Loading issue data:", issue);
+      setFormData({
+        title: issue.title || "",
+        description: issue.description || "",
+        issue_type: issue.issue_type || "bug",
+        status: issue.status || "backlog",
+        priority: issue.priority || "medium",
+        project_id: issue.project_id || initialProjectId || "",
+        epic_id: issue.epic_id || "",
+        story_id: issue.story_id || "",
+        assignee: issue.assignee || "",
+        reporter: issue.reporter || ""
+      });
+    } else {
+      // Reset to defaults for new issue
+      setFormData({
+        title: "",
+        description: "",
+        issue_type: "bug",
+        status: "backlog",
+        priority: "medium",
+        project_id: initialProjectId || "",
+        epic_id: "",
+        story_id: "",
+        assignee: "",
+        reporter: ""
+      });
+    }
+  }, [issue, initialProjectId]);
+
+  useEffect(() => {
+    loadProjectData();
+  }, [loadProjectData]);
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value === '' ? null : value }));
@@ -75,7 +91,7 @@ export default function IssueFormModal({ issue, onSubmit, onClose, projects, use
     
     setIsSubmitting(true);
     try {
-      console.log("Submitting issue data:", formData); // Debug log
+      console.log("Submitting issue data:", formData);
       await onSubmit(formData);
     } catch (error) {
       console.error("Error submitting issue:", error);

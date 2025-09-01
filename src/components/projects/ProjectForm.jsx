@@ -23,24 +23,73 @@ export default function ProjectForm({ project, onSubmit, onCancel }) {
     color: project?.color || PROJECT_COLORS[0]
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState({});
+
+  // Fix: Update form data whenever project prop changes
+  useEffect(() => {
+    if (project) {
+      console.log("ProjectForm: Loading project data:", project);
+      setFormData({
+        name: project.name || "",
+        description: project.description || "",
+        status: project.status || "planning",
+        start_date: project.start_date || "",
+        end_date: project.end_date || "",
+        team_lead: project.team_lead || "",
+        color: project.color || PROJECT_COLORS[0]
+      });
+    } else {
+      // Reset to defaults for new project
+      setFormData({
+        name: "",
+        description: "",
+        status: "planning",
+        start_date: "",
+        end_date: "",
+        team_lead: "",
+        color: PROJECT_COLORS[0]
+      });
+    }
+  }, [project]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isSubmitting) return;
 
+    // Basic validation
+    const newErrors = {};
+    if (!formData.name?.trim()) {
+      newErrors.name = "Project name is required";
+    }
+    
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+
     setIsSubmitting(true);
+    setErrors({});
+    
     try {
-      console.log("Submitting project data:", formData); // Debug log
       await onSubmit(formData);
     } catch (error) {
-      console.error("Error submitting project:", error);
+      setErrors({ submit: error.message || "Failed to save project. Please try again." });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    console.log(`Field ${field} changed to:`, value); // Retained for debugging purposes
+    setFormData(prev => {
+      const newData = { ...prev, [field]: value };
+      console.log("New form data:", newData); // Retained for debugging purposes
+      return newData;
+    });
+    // Clear field error when user starts typing
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: undefined }));
+    }
   };
 
   return (
@@ -62,6 +111,12 @@ export default function ProjectForm({ project, onSubmit, onCancel }) {
       </CardHeader>
 
       <CardContent className="p-6">
+        {errors.submit && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-red-800 text-sm">{errors.submit}</p>
+          </div>
+        )}
+        
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid md:grid-cols-2 gap-6">
             <div className="space-y-2">
@@ -71,8 +126,11 @@ export default function ProjectForm({ project, onSubmit, onCancel }) {
                 value={formData.name}
                 onChange={(e) => handleChange("name", e.target.value)}
                 placeholder="Enter project name"
-                required
+                className={errors.name ? "border-red-300" : ""}
               />
+              {errors.name && (
+                <p className="text-red-600 text-sm">{errors.name}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -144,7 +202,7 @@ export default function ProjectForm({ project, onSubmit, onCancel }) {
                     key={color}
                     type="button"
                     className={`w-8 h-8 rounded-full border-2 transition-all duration-200 ${
-                      formData.color === color ? 'border-slate-400 scale-110' : 'border-slate-200'
+                      formData.color === color ? 'border-slate-400 scale-110 ring-2 ring-slate-300' : 'border-slate-200 hover:border-slate-300'
                     }`}
                     style={{ backgroundColor: color }}
                     onClick={() => handleChange("color", color)}
@@ -154,7 +212,7 @@ export default function ProjectForm({ project, onSubmit, onCancel }) {
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4">
+          <div className="flex justify-end gap-3 pt-6 border-t">
             <Button
               type="button"
               variant="outline"

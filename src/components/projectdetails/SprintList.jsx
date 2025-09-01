@@ -25,7 +25,7 @@ const storyStatusColors = {
   backlog: "bg-gray-100 text-gray-800"
 };
 
-export default function SprintList({ sprints, stories, onEditSprint }) {
+export default function SprintList({ sprints, stories, project, onAddSprint, onEditSprint }) {
   const [expandedSprintId, setExpandedSprintId] = useState(null);
 
   const getSprintProgress = (sprint) => {

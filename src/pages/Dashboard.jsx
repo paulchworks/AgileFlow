@@ -1,22 +1,20 @@
 // src/pages/Dashboard.jsx (or wherever your Dashboard lives)
-
 import React, { useState, useEffect } from "react";
 import { toValidDate } from "@/utils/date";
-
 import Project, { Sprint, Story } from "@/api/entities";
 import { updateAllProjectStatuses } from "@/components/utils/projectStatusUpdater";
-
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-
 import {
   TrendingUp,
   Target,
+  Clock,
   CheckCircle,
   Plus,
-  Zap,
+  ArrowRight,
+  Zap
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -24,6 +22,7 @@ import MetricsCard from "../components/dashboard/MetricsCard";
 import ActiveSprintCard from "../components/dashboard/ActiveSprintCard";
 import RecentActivity from "../components/dashboard/RecentActivity";
 import ProjectOverview from "../components/dashboard/ProjectOverview";
+import ProductivityReport from "../components/dashboard/ProductivityReport";
 
 // ---- helpers ---------------------------------------------------------------
 
@@ -45,7 +44,9 @@ export default function Dashboard() {
   const [stories, setStories] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { 
+    loadData(); 
+  }, []);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -138,12 +139,17 @@ export default function Dashboard() {
           />
         </div>
 
+        <div className="mb-8">
+          <ProductivityReport stories={stories} isLoading={isLoading} />
+        </div>
+
         <div className="grid lg:grid-cols-3 gap-6 mb-8">
           <div className="lg:col-span-2">
             <ActiveSprintCard
               sprints={activeSprints}
               stories={stories}
               isLoading={isLoading}
+              activeProjects={activeProjects}
             />
           </div>
           <div>

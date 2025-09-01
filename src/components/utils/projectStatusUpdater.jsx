@@ -9,57 +9,58 @@ const toISOorNull = (v) => {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 };
 
-/**
- * Update every project's status based on dates:
- * - if end date in the past: "completed"
- * - else if start date in the past: "in-progress"
- * - else "planning"
- */
-export async function updateAllProjectStatuses() {
+export const updateProjectStatus = async (projectId) => {
   try {
-    let projects = await Project.list();
-    projects = arr(projects).map((p) => ({
-      ...p,
-      start_date: toISOorNull(p.start_date ?? p.startDate),
-      end_date: toISOorNull(p.end_date ?? p.endDate),
-    }));
+    const [project, sprints] = await Promise.all([
+      Project.list().then(projects => projects.find(p => p.id === projectId)),
+      Sprint.filter({ project_id: projectId })
+    ]);
 
-    const now = Date.now();
+    if (!project) return;
 
-    for (const p of projects) {
-      const start = p.start_date ? new Date(p.start_date).getTime() : null;
-      const end = p.end_date ? new Date(p.end_date).getTime() : null;
+    let newStatus = null; // Default to no change
 
-      let nextStatus = "planning";
-      if (end && end < now) nextStatus = "completed";
-      else if (start && start <= now) nextStatus = "in-progress";
+    // This logic should only apply if there are sprints.
+    // If there are no sprints, we should not change the project's status automatically.
+    if (sprints.length > 0) {
+      const hasActiveSprint = sprints.some(s => s.status === 'active');
+      const allSprintsCompleted = sprints.every(s => s.status === 'completed');
 
-      if (nextStatus !== p.status) {
-        await Project.update(p.id, { status: nextStatus });
+      if (hasActiveSprint) {
+        newStatus = "active";
+      } else if (allSprintsCompleted) {
+        newStatus = "completed";
+      } else {
+        // Sprints exist, but none are active, meaning the project is in a planning phase.
+        newStatus = "planning";
       }
     }
-  } catch (e) {
-    console.error("Error updating project status:", e);
-  }
-}
 
-/**
- * Back-compat wrapper for places that call `updateProjectStatus(...)`.
- * - If called with (projectId, status), update that project only.
- * - If called with no args, run the bulk updater.
- */
-export async function updateProjectStatus(projectId, status) {
-  if (projectId && status) {
-    try {
-      await Project.update(projectId, { status });
-    } catch (e) {
-      console.error("Error updating single project status:", e);
+    // Only update if a new status was determined by the logic above and it's different
+    // from the project's current status. This prevents overriding manual settings
+    // on projects without any sprints.
+    if (newStatus && newStatus !== project.status) {
+      // Do not automatically move a project from "On Hold" to "Planning".
+      // It should only become "Active" if a new sprint starts.
+      if (project.status === 'on_hold' && newStatus === 'planning') {
+        return;
+      }
+
+      await Project.update(projectId, { status: newStatus });
+      console.log(`Project ${project.name} status automatically updated from ${project.status} to ${newStatus}`);
     }
-    return;
+  } catch (error) {
+    console.error("Error updating project status:", error);
   }
-  // No args -> behave like old bulk function
-  return updateAllProjectStatuses();
-}
+};
 
-// Optional default export for convenience
-export default updateAllProjectStatuses;
+export const updateAllProjectStatuses = async () => {
+  try {
+    const projects = await Project.list();
+    for (const project of projects) {
+      await updateProjectStatus(project.id);
+    }
+  } catch (error) {
+    console.error("Error updating all project statuses:", error);
+  }
+};

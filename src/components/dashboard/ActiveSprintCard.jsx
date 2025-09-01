@@ -11,7 +11,7 @@ import { Calendar, Target, ArrowRight, Clock } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 
-export default function ActiveSprintCard({ sprints, stories, isLoading }) {
+export default function ActiveSprintCard({ sprints, stories, isLoading, activeProjects }) {
   if (isLoading) {
     return (
       <Card className="shadow-lg">
@@ -32,6 +32,25 @@ export default function ActiveSprintCard({ sprints, stories, isLoading }) {
   const activeSprint = sprints[0];
 
   if (!activeSprint) {
+    let buttonAction;
+    let buttonText;
+    let buttonDescription;
+
+    if (!activeProjects || activeProjects.length === 0) {
+      buttonAction = createPageUrl("Projects");
+      buttonText = "Create a Project First";
+      buttonDescription = "You need a project before you can create sprints";
+    } else if (activeProjects.length === 1) {
+      const project = activeProjects[0];
+      buttonAction = createPageUrl(`ProjectDetails?id=${project.id}`);
+      buttonText = "Start a Sprint";
+      buttonDescription = `Create a sprint for "${project.name}"`;
+    } else {
+      buttonAction = createPageUrl("Projects");
+      buttonText = "Choose Project for Sprint";
+      buttonDescription = "Select which project to create a sprint for";
+    }
+
     return (
       <Card className="shadow-lg border-0">
         <CardHeader>
@@ -40,9 +59,12 @@ export default function ActiveSprintCard({ sprints, stories, isLoading }) {
         <CardContent>
           <div className="text-center py-8">
             <Target className="w-12 h-12 text-slate-500 mx-auto mb-4" />
-            <p className="text-slate-800 mb-4">No active sprint found</p>
-            <Link to={createPageUrl("Projects")}>
-              <Button variant="outline">Start a Sprint</Button>
+            <p className="text-slate-800 mb-2">No active sprint found</p>
+            <p className="text-slate-600 text-sm mb-4">{buttonDescription}</p>
+            <Link to={buttonAction}>
+              <Button variant="outline">
+                {buttonText}
+              </Button>
             </Link>
           </div>
         </CardContent>
@@ -113,7 +135,7 @@ export default function ActiveSprintCard({ sprints, stories, isLoading }) {
               </div>
             </div>
 
-            <Link to={createPageUrl("SprintBoard")} className="block">
+            <Link to={createPageUrl(`SprintBoard?project=${activeSprint.project_id}&sprint=${activeSprint.id}`)} className="block">
               <Button className="w-full mt-4 bg-gradient-to-r from-slate-900 to-slate-700 hover:from-slate-800 hover:to-slate-600">
                 View Sprint Board
                 <ArrowRight className="w-4 h-4 ml-2" />

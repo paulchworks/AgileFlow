@@ -12,6 +12,7 @@ import BacklogHeader from "../components/backlog/BacklogHeader";
 import BacklogFilters from "../components/backlog/BacklogFilters";
 import BacklogStoryCard from "../components/backlog/BacklogStoryCard";
 import StoryModal from "../components/sprint/StoryModal";
+import { ActivityLogger } from "../components/utils/activityLogger"; // Added import
 
 export default function Backlog() {
   const [projects, setProjects] = useState([]);
@@ -58,6 +59,29 @@ export default function Backlog() {
     loadData();
   }, [loadData]);
 
+  /**
+   * Helper function to abstract story creation/update, potentially handling mentions or other side effects.
+   * This function wraps the direct Story.create and Story.update calls as implied by the outline.
+   * @param {object} params
+   * @param {string} [params.storyId] - The ID of the story to update. If null, a new story is created.
+   * @param {object} params.data - The story data to save.
+   * @returns {Promise<{success: boolean, story?: Story, error?: Error}>}
+   */
+  const saveStoryWithMentions = async ({ storyId, data }) => {
+    try {
+      let story;
+      if (storyId) {
+        story = await Story.update(storyId, data);
+      } else {
+        story = await Story.create(data);
+      }
+      return { success: true, story };
+    } catch (error) {
+      console.error("Error saving story with mentions:", error);
+      return { success: false, error };
+    }
+  };
+
   const handleStorySubmit = async (storyData) => {
     try {
       console.log("Received story data for save in backlog:", storyData);
@@ -72,17 +96,28 @@ export default function Backlog() {
 
       console.log("Final backlog data to save:", dataToSave);
 
-      if (editingStory) {
-        await Story.update(editingStory.id, dataToSave);
-      } else {
-        await Story.create(dataToSave);
+      // Use the new helper function to save the story
+      const response = await saveStoryWithMentions({
+        storyId: editingStory?.id,
+        data: dataToSave,
+      });
+
+      // Log activity based on the success of the save operation
+      if (response.success) { 
+        if (editingStory) {
+          // Log story update: pass the original story and the newly updated story
+          await ActivityLogger.logStoryUpdated(editingStory, response.story);
+        } else {
+          // Log story creation: pass the newly created story
+          await ActivityLogger.logStoryCreated(response.story);
+        }
       }
       
       setShowStoryModal(false);
       setEditingStory(null);
       loadData();
     } catch (error) {
-      console.error("Error saving story:", error);
+      console.error("Error saving story in handleStorySubmit:", error);
     }
   };
 
@@ -241,6 +276,7 @@ export default function Backlog() {
       <AnimatePresence>
         {showStoryModal && (
           <StoryModal
+            key={editingStory?.id || 'new'}
             story={editingStory}
             selectedProject={selectedProject} // Will be null if in "All Projects" view
             sprints={projectSprints}

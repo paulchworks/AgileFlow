@@ -9,6 +9,13 @@ import { Progress } from "@/components/ui/progress";
 import { Users, ListChecks, Calendar, Edit, ArrowRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const statusColors = {
   planning: "bg-slate-100 text-slate-800 border-slate-200",
@@ -17,7 +24,7 @@ const statusColors = {
   on_hold: "bg-amber-100 text-amber-800 border-amber-200"
 };
 
-export default function ProjectCard({ project, stories, onEdit, isLoading }) {
+export default function ProjectCard({ project, stories, onEdit, onDelete, isLoading }) {
   if (isLoading) {
     return (
       <Card className="shadow-lg border-0">
@@ -53,15 +60,38 @@ export default function ProjectCard({ project, stories, onEdit, isLoading }) {
           <div className="flex items-start justify-between">
             <Link 
               to={createPageUrl(`ProjectDetails?id=${project.id}`)}
-              className="group"
+              className="group flex-1"
             >
               <CardTitle className="text-lg font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">
                 {project.name}
               </CardTitle>
             </Link>
-            <Badge className={`${statusColors[project.status]} border text-xs font-medium`}>
-              {project.status.replace('_', ' ')}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge className={`${statusColors[project.status]} border text-xs font-medium`}>
+                {project.status.replace('_', ' ')}
+              </Badge>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-600">
+                    <MoreVertical className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => onEdit(project)}>
+                    <Edit className="w-4 h-4 mr-2" />
+                    Edit Project
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    onClick={() => onDelete(project)}
+                    className="text-red-600 focus:text-red-600"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete Project
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
           {project.description && (
             <p className="text-sm text-slate-700 pt-1 line-clamp-2">
@@ -91,19 +121,7 @@ export default function ProjectCard({ project, stories, onEdit, isLoading }) {
           </div>
         </CardContent>
 
-        <CardFooter className="bg-slate-50/50 p-4 flex justify-between items-center">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onEdit(project);
-            }}
-          >
-            <Edit className="w-4 h-4 mr-2" />
-            Edit
-          </Button>
+        <CardFooter className="bg-slate-50/50 p-4 flex justify-end">
           <Link to={createPageUrl(`Backlog?project_id=${project.id}`)}>
             <Button variant="outline" size="sm">
               View Backlog

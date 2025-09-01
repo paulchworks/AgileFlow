@@ -51,11 +51,13 @@ export default function IssuesPage() {
     try {
       if (editingIssue) {
         await Issue.update(editingIssue.id, issueData);
+        await ActivityLogger.logIssueUpdated(editingIssue, issueData);
       } else {
         // When creating a new issue, ensure we have a project_id
         const projectToUse = issueData.project_id || 
           (filters.project_id !== 'all' && filters.project_id ? filters.project_id : projects[0]?.id);
-        await Issue.create({ ...issueData, project_id: projectToUse });
+        const newIssue = await Issue.create({ ...issueData, project_id: projectToUse });
+        await ActivityLogger.logIssueCreated({ ...issueData, project_id: projectToUse, id: newIssue.id });
       }
       setShowModal(false);
       setEditingIssue(null);

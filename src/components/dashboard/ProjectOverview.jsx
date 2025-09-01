@@ -63,7 +63,9 @@ export default function ProjectOverview({ projects, stories, isLoading }) {
                 <div key={project.id} className="border border-slate-200 rounded-lg p-4 hover:shadow-md transition-all duration-200">
                   <div className="flex items-start justify-between mb-3">
                     <div>
-                      <h4 className="font-semibold text-slate-900">{project.name}</h4>
+                      <Link to={createPageUrl(`ProjectDetails?id=${project.id}`)} className="group">
+                        <h4 className="font-semibold text-slate-900 group-hover:text-emerald-600 transition-colors">{project.name}</h4>
+                      </Link>
                       <p className="text-sm text-slate-800 mt-1">{project.description}</p>
                     </div>
                     <Badge 

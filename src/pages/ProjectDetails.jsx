@@ -5,8 +5,10 @@ import Project, { Sprint, Story, Issue, User } from "@/api/entities";
 const ProjectSvc = (typeof window !== 'undefined' && window.__AgileFlowProjectAPI) || Project;
 import { Link, useParams } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { motion, AnimatePresence } from "framer-motion";
+import { ActivityLogger } from "../components/utils/activityLogger";
 
 import ProjectDetailHeader from "../components/projectdetails/ProjectDetailHeader";
 import ProjectMetrics from "../components/projectdetails/ProjectMetrics";
@@ -40,53 +42,86 @@ export default function ProjectDetails() {
     }
   }, [id]);
 
-  const loadData = async (projectId) => {
+  const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const projectId = urlParams.get("id");
+
+      if (!projectId) {
+        setProject(null);
+        setIsLoading(false);
+        return;
+      }
+
       const [projectData, sprintsData, storiesData, issuesData, usersData] = await Promise.all([
-        Project.list(),
+        Project.list().then(p => p.find(proj => proj.id === projectId)),
         Sprint.filter({ project_id: projectId }),
         Story.filter({ project_id: projectId }),
         Issue.filter({ project_id: projectId }),
-        User.list()
+        User.list(),
       ]);
       
-      const foundProject = projectData.find(p => p.id === projectId);
-      setProject(foundProject);
-      setSprints(sprintsData);
+      setProject(projectData);
+      setSprints(sprintsData.sort((a, b) => new Date(b.start_date) - new Date(a.start_date)));
       setStories(storiesData);
       setIssues(issuesData);
-      setUsers(usersData.length > 0 ? usersData : [{ email: 'demo@user.com', full_name: 'Demo User' }]);
+      setUsers(usersData);
+
     } catch (error) {
-      console.error("Error loading project details:", error);
+      console.error("Failed to load project details:", error);
     }
     setIsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleAddSprint = () => {
+    console.log("Add sprint button clicked");
+    setEditingSprint(null);
+    setShowSprintForm(true);
+  };
+
+  const handleEditSprint = (sprint) => {
+    console.log("Edit sprint button clicked for:", sprint);
+    setEditingSprint(sprint);
+    setShowSprintForm(true);
   };
 
   const handleSprintSubmit = async (sprintData) => {
     try {
-      const dataToSave = { ...sprintData, project_id: project.id };
+      console.log("Sprint form submitted:", sprintData);
+      
       if (editingSprint) {
-        await Sprint.update(editingSprint.id, dataToSave);
+        const updatedSprint = await Sprint.update(editingSprint.id, sprintData);
+        console.log("Sprint updated:", editingSprint.id);
+        await ActivityLogger.logSprintUpdated(editingSprint, sprintData);
       } else {
-        await Sprint.create(dataToSave);
+        const newSprint = await Sprint.create({ ...sprintData, project_id: project.id });
+        console.log("Sprint created:", newSprint);
+        await ActivityLogger.logSprintCreated({ ...sprintData, id: newSprint.id });
       }
+      
       setShowSprintForm(false);
       setEditingSprint(null);
-      // Reload data
-      loadData(project.id);
+      await loadData(); // Reload data to show new/updated sprint
     } catch (error) {
       console.error("Error saving sprint:", error);
     }
   };
 
+  const handleSprintCancel = () => {
+    console.log("Sprint form cancelled");
+    setShowSprintForm(false);
+    setEditingSprint(null);
+  };
+
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 animate-spin text-emerald-600 mx-auto mb-4" />
-          <p className="text-slate-600">Loading project details...</p>
-        </div>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
       </div>
     );
   }
@@ -113,64 +148,48 @@ export default function ProjectDetails() {
   const projectIssues = issues.filter(i => i.project_id === project.id);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
-      <ProjectDetailHeader 
-        project={project}
-        onCreateSprint={() => {
-          setEditingSprint(null);
-          setShowSprintForm(true);
-        }}
-      />
-
-      <div className="max-w-7xl mx-auto p-6 space-y-8">
-        <ProjectMetrics 
-          project={project}
-          sprints={projectSprints}
-          stories={projectStories}
-          issues={projectIssues}
-        />
-
-        <div className="grid lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-8">
-            <BurndownChart 
-              sprints={projectSprints}
-              stories={projectStories}
-            />
-            
-            <SprintList 
-              sprints={projectSprints}
-              stories={projectStories}
-              onEditSprint={(sprint) => {
-                setEditingSprint(sprint);
-                setShowSprintForm(true);
-              }}
-            />
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 p-6">
+      <div className="max-w-7xl mx-auto">
+        <ProjectDetailHeader project={project} onCreateSprint={handleAddSprint} />
+        <ProjectMetrics sprints={sprints} stories={stories} issues={issues} />
+        
+        <div className="grid lg:grid-cols-3 gap-6 mb-8">
+          <div className="lg:col-span-2">
+            <BurndownChart sprints={sprints} stories={stories} />
           </div>
-
-          <div className="space-y-8">
-            <TeamContributions 
-              stories={projectStories}
-              users={users}
-            />
-            
-            <ProjectActivityFeed 
-              stories={projectStories}
-              issues={projectIssues}
-            />
+          <div>
+            <TeamContributions stories={stories} users={users} />
           </div>
         </div>
-      </div>
 
-      {showSprintForm && (
-        <SprintForm
-          sprint={editingSprint}
-          onSubmit={handleSprintSubmit}
-          onClose={() => {
-            setShowSprintForm(false);
-            setEditingSprint(null);
-          }}
-        />
-      )}
+        <div className="grid lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <SprintList 
+              sprints={sprints} 
+              project={project}
+              onAddSprint={handleAddSprint}
+              onEditSprint={handleEditSprint}
+            />
+          </div>
+          <div>
+            <ProjectActivityFeed stories={stories} issues={issues} />
+          </div>
+        </div>
+
+        <AnimatePresence>
+          {showSprintForm && (
+            <SprintForm
+              sprint={editingSprint}
+              project={project}
+              onSubmit={handleSprintSubmit}
+              onCancel={() => {
+                setShowSprintForm(false);
+                setEditingSprint(null);
+              }}
+            />
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
